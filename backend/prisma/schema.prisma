@@ -1,0 +1,347 @@
+// Campaign Amplification Platform - Prisma Schema
+// Prisma v7 with PostgreSQL (Supabase)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────────
+
+enum CampaignStatus {
+  DRAFT
+  SUBMITTED
+  CHANGES_REQUESTED
+  APPROVED
+  FUNDING
+  FUNDED
+  DISTRIBUTION_PREP
+  PROMOTING
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+enum CampaignCategory {
+  ENVIRONMENT
+  HEALTH
+  SCIENCE
+  EDUCATION
+  PUBLIC_POLICY
+  ECONOMIC_POLICY
+  COMMUNITY
+  ARTS_CULTURE
+  BUSINESS
+  OTHER
+}
+
+enum ContributionStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  CREATED
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum NotificationType {
+  CAMPAIGN_SUBMITTED
+  CAMPAIGN_APPROVED
+  CAMPAIGN_REJECTED
+  CAMPAIGN_CHANGES_REQUESTED
+  CAMPAIGN_FUNDING_AVAILABLE
+  FUNDING_MILESTONE
+  CAMPAIGN_DEADLINE_APPROACHING
+  CONTRIBUTION_SUCCESSFUL
+  CONTRIBUTION_FAILED
+  CAMPAIGN_PROMOTION_STARTED
+  DISTRIBUTION_PROGRESS
+  CAMPAIGN_COMPLETED
+  REPORT_AVAILABLE
+  CAMPAIGN_UPDATE
+  ACCOUNT_SECURITY
+}
+
+enum FeedbackType {
+  VISUAL_ENGAGEMENT
+  MESSAGE_IMPACT
+}
+
+enum FeedbackValue {
+  NO
+  SOMEWHAT
+  YES
+}
+
+// ─── Models ─────────────────────────────────────────────────────────────────────
+
+model User {
+  id          String   @id @default(uuid()) @db.Uuid
+  authSubject String   @unique @map("auth_subject")
+  email       String?  @unique
+  name        String?
+  displayName String?  @map("display_name")
+  avatarUrl   String?  @map("avatar_url")
+  bio         String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  campaigns      Campaign[]
+  contributions  Contribution[]
+  savedCampaigns SavedCampaign[]
+  notifications  Notification[]
+  feedback       CampaignFeedback[]
+  campaignEvents CampaignEvent[]
+
+  @@map("users")
+}
+
+model Campaign {
+  id        String         @id @default(uuid()) @db.Uuid
+  creatorId String         @map("creator_id") @db.Uuid
+  status    CampaignStatus @default(DRAFT)
+
+  // Step 1 - Basics
+  title           String?
+  category        CampaignCategory?
+  creatorName     String?               @map("creator_name")
+  summary         String?
+  coverImageUrl   String?               @map("cover_image_url")
+
+  // Step 2 - Story
+  headline        String?
+  introText       String?               @map("intro_text")
+  storyContent    Json?                 @map("story_content") // sections array
+  sources         Json?                 // [{title, url}]
+  suggestedActions String?              @map("suggested_actions")
+
+  // Step 4 - Reach
+  targetLocations Json?                 @map("target_locations") // string[]
+  audienceInterests Json?               @map("audience_interests") // string[]
+  distributionChannels Json?            @map("distribution_channels") // string[]
+  campaignDuration Int?                 @map("campaign_duration") // days
+
+  // Step 5 - Submit
+  fundingGoalPaise  Int?               @map("funding_goal_paise") // stored in paise
+  estimatedReach    Int?               @map("estimated_reach")
+  agreedToTerms     Boolean            @default(false) @map("agreed_to_terms")
+
+  // Computed / derived
+  totalRaisedPaise  Int                @default(0) @map("total_raised_paise")
+  contributorCount  Int                @default(0) @map("contributor_count")
+
+  // Timestamps
+  submittedAt   DateTime?              @map("submitted_at")
+  approvedAt    DateTime?              @map("approved_at")
+  fundingEndsAt DateTime?              @map("funding_ends_at")
+  completedAt   DateTime?              @map("completed_at")
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
+
+  // Flags
+  isFeatured    Boolean                @default(false) @map("is_featured")
+
+  // Step tracking
+  completedSteps Json?                 @map("completed_steps") // e.g. ["basics","story","visuals","reach"]
+
+  // Relations
+  creator        User                  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  creatives      CampaignCreative[]
+  targeting      CampaignTargeting?
+  contributions  Contribution[]
+  savedBy        SavedCampaign[]
+  events         CampaignEvent[]
+  feedback       CampaignFeedback[]
+  reports        DistributionReport[]
+
+  @@index([status])
+  @@index([category])
+  @@index([creatorId])
+  @@index([isFeatured])
+  @@index([createdAt])
+  @@index([totalRaisedPaise])
+  @@map("campaigns")
+}
+
+model CampaignCreative {
+  id           String   @id @default(uuid()) @db.Uuid
+  campaignId   String   @map("campaign_id") @db.Uuid
+  type         String   // "cover", "ad_image", "video"
+  url          String
+  headline     String?
+  description  String?
+  callToAction String?  @map("call_to_action")
+  caption      String?
+  credit       String?
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@map("campaign_creatives")
+}
+
+model CampaignTargeting {
+  id           String   @id @default(uuid()) @db.Uuid
+  campaignId   String   @unique @map("campaign_id") @db.Uuid
+  locations    Json?    // string[]
+  ageRange     Json?    @map("age_range") // {min, max}
+  interests    Json?    // string[]
+  gender       String?
+  platforms    Json?    // string[]
+  budgetSplit  Json?    @map("budget_split") // {platform: percentage}
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@map("campaign_targeting")
+}
+
+model Contribution {
+  id              String             @id @default(uuid()) @db.Uuid
+  campaignId      String             @map("campaign_id") @db.Uuid
+  userId          String             @map("user_id") @db.Uuid
+  amountPaise     Int                @map("amount_paise")
+  platformFeePaise Int               @default(0) @map("platform_fee_paise")
+  totalPaise      Int                @map("total_paise")
+  status          ContributionStatus @default(PENDING)
+  isAnonymous     Boolean            @default(true) @map("is_anonymous")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  campaign Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments PaymentAttempt[]
+
+  @@index([campaignId])
+  @@index([userId])
+  @@index([status])
+  @@map("contributions")
+}
+
+model PaymentAttempt {
+  id                String        @id @default(uuid()) @db.Uuid
+  contributionId    String        @map("contribution_id") @db.Uuid
+  razorpayOrderId   String?       @unique @map("razorpay_order_id")
+  razorpayPaymentId String?       @unique @map("razorpay_payment_id")
+  razorpaySignature String?       @map("razorpay_signature")
+  amountPaise       Int           @map("amount_paise")
+  currency          String        @default("INR")
+  status            PaymentStatus @default(CREATED)
+  errorMessage      String?       @map("error_message")
+  verifiedAt        DateTime?     @map("verified_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  contribution Contribution @relation(fields: [contributionId], references: [id], onDelete: Cascade)
+
+  @@index([contributionId])
+  @@index([razorpayOrderId])
+  @@index([razorpayPaymentId])
+  @@map("payment_attempts")
+}
+
+model SavedCampaign {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  campaignId String   @map("campaign_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, campaignId])
+  @@index([userId])
+  @@index([campaignId])
+  @@map("saved_campaigns")
+}
+
+model CampaignEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  campaignId String   @map("campaign_id") @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  type       String   // "created", "submitted", "approved", "contribution_received", etc.
+  title      String
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("campaign_events")
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  title     String
+  message   String
+  metadata  Json?
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model CampaignFeedback {
+  id         String       @id @default(uuid()) @db.Uuid
+  campaignId String       @map("campaign_id") @db.Uuid
+  userId     String       @map("user_id") @db.Uuid
+  type       FeedbackType
+  value      FeedbackValue
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId, type])
+  @@index([campaignId])
+  @@map("campaign_feedback")
+}
+
+model DistributionReport {
+  id               String   @id @default(uuid()) @db.Uuid
+  campaignId       String   @map("campaign_id") @db.Uuid
+  totalRaisedPaise Int      @map("total_raised_paise")
+  adSpendPaise     Int      @map("ad_spend_paise")
+  platformFeePaise Int      @map("platform_fee_paise")
+  impressions      Int      @default(0)
+  clicks           Int      @default(0)
+  estimatedReach   Int      @map("estimated_reach")
+  measuredReach    Int?     @map("measured_reach")
+  startDate        DateTime? @map("start_date")
+  endDate          DateTime? @map("end_date")
+  metadata         Json?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@map("distribution_reports")
+}

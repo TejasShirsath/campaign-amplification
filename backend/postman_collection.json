@@ -1,0 +1,656 @@
+{
+  "info": {
+    "name": "Campaign Amplification Platform API",
+    "description": "Production API collection for Campaign Amplification Platform. Test public discovery, 5-step campaign creation, contributions, Razorpay payments, user dashboard, bookmarks, community feedback, and activity notifications.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "YOUR_AUTH0_ACCESS_TOKEN",
+      "type": "string"
+    },
+    {
+      "key": "campaignId",
+      "value": "123e4567-e89b-12d3-a456-426614174000",
+      "type": "string"
+    },
+    {
+      "key": "contributionId",
+      "value": "123e4567-e89b-12d3-a456-426614174001",
+      "type": "string"
+    },
+    {
+      "key": "notificationId",
+      "value": "123e4567-e89b-12d3-a456-426614174002",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Health & Readiness",
+      "item": [
+        {
+          "name": "Liveness Probe (GET /health)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Database Readiness Probe (GET /ready)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ready",
+              "host": ["{{baseUrl}}"],
+              "path": ["ready"]
+            }
+          }
+        },
+        {
+          "name": "API v1 Health Probe (GET /api/v1/health)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Campaign Discovery (Public - No Auth Required)",
+      "item": [
+        {
+          "name": "List Campaigns with Filters & Pagination",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns?page=1&limit=10&category=ENVIRONMENT&sort=newest",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "category", "value": "ENVIRONMENT", "description": "ENVIRONMENT, HEALTH, SCIENCE, EDUCATION, PUBLIC_POLICY, ECONOMIC_POLICY, COMMUNITY, ARTS_CULTURE, BUSINESS, OTHER" },
+                { "key": "sort", "value": "newest", "description": "newest, oldest, most_funded, least_funded, ending_soon" },
+                { "key": "search", "value": "solar", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Featured Campaigns",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/featured",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "featured"]
+            }
+          }
+        },
+        {
+          "name": "Get Campaign Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Optional: include if you want creator permissions/draft access"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Campaign Funding Progress",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}/progress",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}", "progress"]
+            }
+          }
+        },
+        {
+          "name": "Get Campaign Feedback Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}/feedback",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}", "feedback"]
+            }
+          }
+        },
+        {
+          "name": "Get Campaign Activity Timeline Events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/activity/campaigns/{{campaignId}}/events?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "activity", "campaigns", "{{campaignId}}", "events"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Distribution Transparency Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Creator can view anytime; public can view once COMPLETED"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}/report",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}", "report"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. 5-Step Campaign Creation & Lifecycle (Auth Required)",
+      "item": [
+        {
+          "name": "Step 0: Create Initial Draft",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Clean Water Micro-Filtration for 50 Villages\",\n  \"category\": \"HEALTH\",\n  \"creatorName\": \"Jal Jeevan Foundation\",\n  \"summary\": \"Funding community-wide digital billboard and social media distribution to bring clean water filters to rural schools.\",\n  \"coverImageUrl\": \"https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=800\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns"]
+            }
+          }
+        },
+        {
+          "name": "Step 1: Update Basics",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Solar Micro-Grids for Emergency Health Clinics\",\n  \"category\": \"HEALTH\",\n  \"creatorName\": \"Rural Energy Initiative\",\n  \"summary\": \"Amplifying awareness and pooling funds for targeted ad distribution to install solar batteries in remote clinics.\",\n  \"coverImageUrl\": \"https://images.unsplash.com/photo-1509391365360-2e959784a276?w=800\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}/basics",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}", "basics"]
+            }
+          }
+        },
+        {
+          "name": "Step 2: Update Story & Sources",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"headline\": \"Power outages in primary health clinics risk patient lives during emergencies\",\n  \"introText\": \"More than 120 primary health centers in the district experience 6+ hours of unscheduled blackouts daily.\",\n  \"storyContent\": [\n    {\n      \"id\": \"section-1\",\n      \"type\": \"text\",\n      \"content\": \"During heatwaves, vaccines and antivenom spoil when refrigeration fails. Solar power ensures 24/7 reliability.\"\n    },\n    {\n      \"id\": \"section-2\",\n      \"type\": \"statistic\",\n      \"value\": \"85%\",\n      \"caption\": \"Reduction in vaccine wastage with dedicated solar backup systems\"\n    }\n  ],\n  \"sources\": [\n    {\n      \"title\": \"State Health Ministry Report 2025\",\n      \"url\": \"https://example.gov.in/health-energy-report\"\n    },\n    {\n      \"title\": \"WHO Rural Health Infrastructure Audit\",\n      \"url\": \"https://who.int/publications/rural-health-2025\"\n    }\n  ],\n  \"suggestedActions\": \"Share this campaign with local representatives and back the distribution fund.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}/story",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}", "story"]
+            }
+          }
+        },
+        {
+          "name": "Step 3: Update Visuals & Ad Creatives",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"creatives\": [\n    {\n      \"type\": \"cover\",\n      \"url\": \"https://images.unsplash.com/photo-1509391365360-2e959784a276?w=800\",\n      \"headline\": \"Solar Power for Rural Health Clinics\",\n      \"description\": \"Powering emergency healthcare through community-backed distribution\",\n      \"callToAction\": \"Amplify This Message\",\n      \"sortOrder\": 0\n    },\n    {\n      \"type\": \"ad_image\",\n      \"url\": \"https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800\",\n      \"headline\": \"Never Let Life-Saving Equipment Go Dark\",\n      \"caption\": \"Primary health clinic solar array installation\",\n      \"sortOrder\": 1\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}/visuals",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}", "visuals"]
+            }
+          }
+        },
+        {
+          "name": "Step 4: Update Reach & Target Audience",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetLocations\": [\"Maharashtra\", \"Karnataka\", \"Madhya Pradesh\"],\n  \"audienceInterests\": [\"Renewable Energy\", \"Public Health\", \"Rural Development\"],\n  \"distributionChannels\": [\"Instagram\", \"YouTube\", \"Local Digital Screens\"],\n  \"campaignDuration\": 30\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}/reach",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}", "reach"]
+            }
+          }
+        },
+        {
+          "name": "Step 5: Submit Campaign for Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fundingGoalPaise\": 5000000,\n  \"estimatedReach\": 75000,\n  \"agreedToTerms\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}", "submit"]
+            }
+          }
+        },
+        {
+          "name": "Preview Campaign (Creator Only)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}/preview",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}", "preview"]
+            }
+          }
+        },
+        {
+          "name": "Partial Update (Save Draft)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Draft Title Here\",\n  \"summary\": \"Auto-saved draft progress from mobile editor.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Contributions & Payments (Razorpay)",
+      "item": [
+        {
+          "name": "Create Contribution & Razorpay Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountPaise\": 50000,\n  \"isAnonymous\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}/contributions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}", "contributions"]
+            }
+          }
+        },
+        {
+          "name": "Get Contribution Receipt & Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/contributions/{{contributionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "contributions", "{{contributionId}}"]
+            }
+          }
+        },
+        {
+          "name": "Verify Razorpay Payment Signature",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"razorpayOrderId\": \"order_demo_12345678\",\n  \"razorpayPaymentId\": \"pay_demo_87654321\",\n  \"razorpaySignature\": \"valid_hmac_sha256_hex_signature\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/razorpay/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "payments", "razorpay", "verify"]
+            }
+          }
+        },
+        {
+          "name": "Simulate Razorpay Webhook Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Razorpay-Signature", "value": "webhook_hmac_signature_here" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"payment.captured\",\n  \"payload\": {\n    \"payment\": {\n      \"entity\": {\n        \"id\": \"pay_test_123456\",\n        \"order_id\": \"order_demo_12345678\",\n        \"amount\": 52500,\n        \"currency\": \"INR\",\n        \"status\": \"captured\"\n      }\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/razorpay",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "webhooks", "razorpay"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. User Profile & History (Auth Required)",
+      "item": [
+        {
+          "name": "Get Current User Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "me"]
+            }
+          }
+        },
+        {
+          "name": "Update User Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Tejas S.\",\n  \"bio\": \"Community organizer & clean energy supporter.\",\n  \"avatarUrl\": \"https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "me"]
+            }
+          }
+        },
+        {
+          "name": "Get My Created Campaigns",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/campaigns?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "me", "campaigns"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Contribution Payment History",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/contributions?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "me", "contributions"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Saved Campaigns",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me/saved-campaigns?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "me", "saved-campaigns"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Bookmarks & Feedback (Auth Required)",
+      "item": [
+        {
+          "name": "Save / Bookmark Campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}/save",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}", "save"]
+            }
+          }
+        },
+        {
+          "name": "Unsave / Remove Bookmark",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}/save",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}", "save"]
+            }
+          }
+        },
+        {
+          "name": "Check If Saved by User",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}/saved",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}", "saved"]
+            }
+          }
+        },
+        {
+          "name": "Submit Feedback Vote",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"VISUAL_ENGAGEMENT\",\n  \"value\": \"YES\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}/feedback",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}", "feedback"]
+            }
+          }
+        },
+        {
+          "name": "Get User's Own Feedback Votes",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/campaigns/{{campaignId}}/feedback/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "campaigns", "{{campaignId}}", "feedback", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Notifications & Activity (Auth Required)",
+      "item": [
+        {
+          "name": "Get Notifications Feed",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/activity/notifications?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "activity", "notifications"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Unread Notifications Count",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/activity/notifications/unread-count",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "activity", "notifications", "unread-count"]
+            }
+          }
+        },
+        {
+          "name": "Mark Single Notification as Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/activity/notifications/{{notificationId}}/read",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "activity", "notifications", "{{notificationId}}", "read"]
+            }
+          }
+        },
+        {
+          "name": "Mark All Notifications as Read",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/activity/notifications/read-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "activity", "notifications", "read-all"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
