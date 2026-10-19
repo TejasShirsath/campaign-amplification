@@ -150,4 +150,20 @@ router.get(
   })
 );
 
+// POST /campaigns/:id/status - Transition campaign status (Admin / Reviewer / Demo)
+router.post(
+  '/:id/status',
+  optionalAuth,
+  validate({ params: uuidParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { status } = req.body;
+    const campaign = await campaignService.transitionStatus(
+      req.params.id as string,
+      status,
+      req.userId
+    );
+    sendSuccess(res, campaign);
+  })
+);
+
 export default router;
