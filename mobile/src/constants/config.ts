@@ -9,8 +9,27 @@ const DEFAULT_API_HOST = Platform.select({
   default: 'http://localhost:5000',
 });
 
+function getApiBaseUrl(): string {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:5000/api/v1';
+    }
+  }
+  return process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_HOST;
+}
+
+export function resolveImageUrl(url?: string | null): string {
+  if (!url) return '';
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return url.replace(/http:\/\/10\.\d+\.\d+\.\d+:5000/, 'http://localhost:5000');
+    }
+  }
+  return url;
+}
+
 export const Config = {
-  API_BASE_URL: process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_HOST,
+  API_BASE_URL: getApiBaseUrl(),
   AUTH0: {
     domain: process.env.EXPO_PUBLIC_AUTH0_DOMAIN || 'dev-00mz0uwnaumdf832.us.auth0.com',
     clientId: process.env.EXPO_PUBLIC_AUTH0_CLIENT_ID || '9hD9qx2PTUVIR91USaRPlC3iWpJn4dmD',

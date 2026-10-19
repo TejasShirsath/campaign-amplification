@@ -1,10 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Users, Sparkles } from 'lucide-react-native';
+import { Sparkles } from 'lucide-react-native';
 import { ScreenContainer } from '../../components/common/screen-container';
 import { Button } from '../../components/common/button';
-import { HighlightCard } from '../../components/common/metric-card';
 import { CampaignCardLarge } from '../../components/campaign/campaign-cards';
 import { HeaderBar } from '../../components/common/header-bar';
 import { Colors, Spacing, Typography } from '../../constants/theme';
@@ -109,14 +108,6 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Stat Highlight Card matching reference */}
-      <HighlightCard
-        value="12,5K"
-        label="People reached this week"
-        trend="↑ 28%"
-        icon={<Users size={22} color={Colors.primary} />}
-        style={styles.statCard}
-      />
 
       {/* Featured Campaigns Section matching reference */}
       <View style={styles.sectionHeader}>
@@ -141,6 +132,12 @@ export default function HomeScreen() {
             isSaved={!!savedIds[primaryFeatured.id]}
             onToggleSave={() => toggleSave(primaryFeatured.id)}
             onPress={() => router.push(`/campaign/${primaryFeatured.id}` as any)}
+            onSupportPress={() =>
+              router.push({
+                pathname: '/campaign/contribute',
+                params: { id: primaryFeatured.id },
+              } as any)
+            }
           />
 
           {/* Additional featured campaigns if available */}
@@ -151,6 +148,12 @@ export default function HomeScreen() {
                 isSaved={!!savedIds[camp.id]}
                 onToggleSave={() => toggleSave(camp.id)}
                 onPress={() => router.push(`/campaign/${camp.id}` as any)}
+                onSupportPress={() =>
+                  router.push({
+                    pathname: '/campaign/contribute',
+                    params: { id: camp.id },
+                  } as any)
+                }
               />
             </View>
           ))}
@@ -205,13 +208,11 @@ const styles = StyleSheet.create({
   secondaryHeroBtn: {
     width: '100%',
   },
-  statCard: {
-    marginVertical: Spacing.lg,
-  },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: Spacing.xl,
     marginBottom: Spacing.md,
   },
   sectionTitle: {

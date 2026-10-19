@@ -198,13 +198,17 @@ export class CampaignService {
 
     const completedSteps = this.addCompletedStep(campaign.completedSteps as string[] | null, 'story');
 
+    const cleanSources = Array.isArray(data.sources)
+      ? data.sources.filter((s) => s && (s.title?.trim() || s.url?.trim()))
+      : data.sources;
+
     return prisma.campaign.update({
       where: { id },
       data: {
         headline: data.headline ?? null,
         introText: data.introText ?? null,
         storyContent: data.storyContent as any ?? undefined,
-        sources: data.sources as any ?? undefined,
+        sources: cleanSources as any ?? undefined,
         suggestedActions: data.suggestedActions ?? null,
         completedSteps,
       },
@@ -220,15 +224,17 @@ export class CampaignService {
 
     const completedSteps = this.addCompletedStep(campaign.completedSteps as string[] | null, 'visuals');
 
+    const validCreatives = (data.creatives || []).filter((c) => c && c.url && c.url.trim());
+
     // Replace all creatives for this campaign
     await prisma.$transaction([
       prisma.campaignCreative.deleteMany({ where: { campaignId: id } }),
-      ...data.creatives.map((creative) =>
+      ...validCreatives.map((creative) =>
         prisma.campaignCreative.create({
           data: {
             campaignId: id,
             type: creative.type,
-            url: creative.url,
+            url: creative.url!,
             headline: creative.headline ?? null,
             description: creative.description ?? null,
             callToAction: creative.callToAction ?? null,

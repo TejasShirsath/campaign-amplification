@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
 import { env } from './config/env.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { notFoundHandler } from './middleware/not-found.js';
@@ -15,14 +16,15 @@ import savedCampaignRoutes from './modules/saved-campaigns/saved-campaigns.route
 import feedbackRoutes from './modules/feedback/feedback.routes.js';
 import activityRoutes from './modules/activity/activity.routes.js';
 import reportRoutes from './modules/reports/reports.routes.js';
+import uploadRoutes from './modules/uploads/uploads.routes.js';
 
 export function createApp() {
   const app = express();
 
   // ─── Global Middleware ──────────────────────────────────────────────────────
 
-  // Security headers
-  app.use(helmet());
+  // Security headers with cross-origin resource sharing for uploaded static files
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
   // CORS
   app.use(
@@ -82,8 +84,21 @@ export function createApp() {
   );
 
   // JSON body parser with size limit
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use(express.json({ limit: '25mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+  // Static files serving for uploaded assets with permissive cross-origin and private network headers
+  app.use(
+    '/uploads',
+    (_req, res, next) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Access-Control-Allow-Private-Network', 'true');
+      next();
+    },
+    express.static(path.resolve(process.cwd(), 'uploads'))
+  );
 
   // ─── Routes ─────────────────────────────────────────────────────────────────
 
@@ -92,6 +107,7 @@ export function createApp() {
   app.use('/api/v1', healthRoutes);
 
   // API v1 routes
+  app.use('/api/v1/uploads', uploadRoutes);
   app.use('/api/v1/users', authLimiter, userRoutes);
   app.use('/api/v1/campaigns', campaignRoutes);
   app.use('/api/v1', paymentLimiter, contributionRoutes);

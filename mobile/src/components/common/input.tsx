@@ -7,9 +7,31 @@ import {
   ViewStyle,
   TextInputProps,
   TouchableOpacity,
+  Platform,
 } from 'react-native';
 import { ChevronDown, Lightbulb } from 'lucide-react-native';
 import { Colors, Radii, Spacing, Typography } from '../../constants/theme';
+
+// Ensure browser inputs never render default outline/focus ring on Web
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const styleId = 'rippleup-input-focus-reset';
+  if (!document.getElementById(styleId)) {
+    const styleEl = document.createElement('style');
+    styleEl.id = styleId;
+    styleEl.textContent = `
+      input, textarea, select {
+        outline: none !important;
+        box-shadow: none !important;
+        -webkit-tap-highlight-color: transparent !important;
+      }
+      input:focus, textarea:focus, select:focus {
+        outline: none !important;
+        box-shadow: none !important;
+      }
+    `;
+    document.head.appendChild(styleEl);
+  }
+}
 
 export interface InputProps extends TextInputProps {
   label?: string;
@@ -34,6 +56,14 @@ export const Input: React.FC<InputProps> = ({
 }) => {
   const [isFocused, setIsFocused] = useState(false);
 
+  // Extract height and minHeight so the wrapper properly encloses the multiline input
+  const flattenedStyle = (StyleSheet.flatten(style) || {}) as ViewStyle & {
+    height?: number | string;
+    minHeight?: number | string;
+  };
+  const { height: customHeight, minHeight: customMinHeight, ...inputCustomStyle } =
+    flattenedStyle;
+
   return (
     <View style={[styles.container, containerStyle]}>
       {label && <Text style={styles.label}>{label}</Text>}
@@ -41,6 +71,8 @@ export const Input: React.FC<InputProps> = ({
         style={[
           styles.inputWrapper,
           multiline ? styles.textareaWrapper : null,
+          customMinHeight !== undefined ? { minHeight: customMinHeight } : null,
+          customHeight !== undefined ? { height: customHeight } : null,
           isFocused ? styles.focusedWrapper : null,
           error ? styles.errorWrapper : null,
         ]}
@@ -50,7 +82,12 @@ export const Input: React.FC<InputProps> = ({
           value={value}
           maxLength={maxLength}
           multiline={multiline}
-          style={[styles.input, multiline ? styles.textarea : null, style]}
+          underlineColorAndroid="transparent"
+          style={[
+            styles.input,
+            multiline ? styles.textarea : null,
+            inputCustomStyle,
+          ]}
           onFocus={(e) => {
             setIsFocused(true);
             onFocus?.(e);
@@ -164,12 +201,15 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     borderRadius: Radii.md,
     paddingHorizontal: Spacing.md,
-    height: 48,
+    minHeight: 48,
     justifyContent: 'center',
   },
   textareaWrapper: {
-    height: 100,
-    paddingVertical: Spacing.sm,
+    minHeight: 110,
+    height: 'auto',
+    paddingVertical: 12,
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
   },
   focusedWrapper: {
     borderColor: Colors.primary,
@@ -181,10 +221,30 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.base,
     color: Colors.text,
     padding: 0,
+    width: '100%',
+    ...(Platform.OS === 'web'
+      ? ({
+          outlineStyle: 'none',
+          outlineWidth: 0,
+          outlineColor: 'transparent',
+          boxShadow: 'none',
+        } as any)
+      : {}),
   },
   textarea: {
     textAlignVertical: 'top',
-    height: '100%',
+    flex: 1,
+    width: '100%',
+    minHeight: 80,
+    ...(Platform.OS === 'web'
+      ? ({
+          outlineStyle: 'none',
+          outlineWidth: 0,
+          outlineColor: 'transparent',
+          boxShadow: 'none',
+          resize: 'none',
+        } as any)
+      : {}),
   },
   metaRow: {
     flexDirection: 'row',

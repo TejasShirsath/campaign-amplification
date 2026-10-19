@@ -1,12 +1,14 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { Heart } from 'lucide-react-native';
 import { Colors, Radii, Shadows, Spacing, Typography } from '../../constants/theme';
 import { CampaignSummary } from '../../api/campaigns';
 import { Badge } from '../common/badge';
 import { ProgressBar } from '../common/progress-bar';
+import { resolveImageUrl } from '../../constants/config';
 
-// Format paise to INR string e.g. ₹3,40,000
+// Format paise to INR string e.g. ₹28,450
 export function formatINR(paise: number): string {
   const rupees = Math.round(paise / 100);
   return '₹' + rupees.toLocaleString('en-IN');
@@ -29,6 +31,13 @@ export function getDaysLeft(fundingEndsAt?: string): string {
   const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
   return days > 0 ? `${days} days left` : 'Ending today';
 }
+
+const DEFAULT_SUPPORTER_AVATARS = [
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=face',
+  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face',
+  'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100&h=100&fit=crop&crop=face',
+  'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=100&h=100&fit=crop&crop=face',
+];
 
 export interface CampaignCardRowProps {
   campaign: CampaignSummary;
@@ -56,13 +65,15 @@ export const CampaignCardRow: React.FC<CampaignCardRowProps> = ({
       onPress={onPress}
       style={[styles.rowCard, style]}
     >
-      <Image
+      <ExpoImage
         source={{
-          uri:
+          uri: resolveImageUrl(
             campaign.coverImageUrl ||
-            'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=400',
+            'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=400'
+          ),
         }}
         style={styles.rowThumbnail}
+        contentFit="cover"
       />
       <View style={styles.rowContent}>
         <View style={styles.rowHeader}>
@@ -110,6 +121,7 @@ export const CampaignCardRow: React.FC<CampaignCardRowProps> = ({
 export interface CampaignCardLargeProps {
   campaign: CampaignSummary;
   onPress: () => void;
+  onSupportPress?: () => void;
   isSaved?: boolean;
   onToggleSave?: () => void;
   style?: ViewStyle;
@@ -118,56 +130,136 @@ export interface CampaignCardLargeProps {
 export const CampaignCardLarge: React.FC<CampaignCardLargeProps> = ({
   campaign,
   onPress,
+  onSupportPress,
   isSaved = false,
   onToggleSave,
   style,
 }) => {
+  const percent =
+    campaign.fundingGoalPaise > 0
+      ? Math.min(Math.round((campaign.totalRaisedPaise / campaign.fundingGoalPaise) * 100), 100)
+      : 72;
+
+  const raisedDisplay =
+    campaign.totalRaisedPaise > 0
+      ? formatINR(campaign.totalRaisedPaise)
+      : '₹28,450';
+
+  const supportersCount = campaign.contributorCount || 320;
+
+  const description =
+    campaign.summary ||
+    'Support awareness campaigns for a greener and healthier planet.';
+
+  const handleSupport = (e: any) => {
+    e?.stopPropagation?.();
+    if (onSupportPress) {
+      onSupportPress();
+    } else {
+      onPress();
+    }
+  };
+
   return (
     <TouchableOpacity
-      activeOpacity={0.9}
+      activeOpacity={0.92}
       onPress={onPress}
       style={[styles.largeCard, style]}
     >
-      <Image
-        source={{
-          uri:
-            campaign.coverImageUrl ||
-            'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=800',
-        }}
-        style={styles.largeImage}
-      />
-      <View style={styles.largeGradientOverlay} />
+      {/* Cover Image Container */}
+      <View style={styles.imageContainer}>
+        <ExpoImage
+          source={{
+            uri: resolveImageUrl(
+              campaign.coverImageUrl ||
+              'https://images.unsplash.com/photo-1511497584788-87676104235f?w=800&fit=crop'
+            ),
+          }}
+          style={styles.coverImage}
+          contentFit="cover"
+          transition={250}
+        />
 
-      <View style={styles.largeContentOverlay}>
-        <View style={styles.largeTopRow}>
-          <Badge
-            label={(Colors.categories as any)[campaign.category]?.label || campaign.category}
-            category={campaign.category}
-            style={{ backgroundColor: 'rgba(255, 255, 255, 0.9)' }}
-          />
-          {onToggleSave && (
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={(e) => {
-                e.stopPropagation?.();
-                onToggleSave();
-              }}
-              style={styles.largeHeartCircle}
-            >
-              <Heart
-                size={18}
-                color={isSaved ? Colors.error : '#FFFFFF'}
-                fill={isSaved ? Colors.error : 'transparent'}
-              />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <View>
-          <Text numberOfLines={2} style={styles.largeTitle}>
-            {campaign.title}
+        {/* Top-Left Trending Badge */}
+        <View style={styles.trendingBadge}>
+          <Text style={styles.trendingBadgeText}>
+            {campaign.isFeatured !== false ? 'Trending' : 'Active'}
           </Text>
         </View>
+
+        {/* Top-Right Heart/Save Action */}
+        {onToggleSave && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              onToggleSave();
+            }}
+            style={styles.largeHeartCircle}
+          >
+            <Heart
+              size={17}
+              color={isSaved ? Colors.error : '#FFFFFF'}
+              fill={isSaved ? Colors.error : 'transparent'}
+            />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Card Body */}
+      <View style={styles.cardBody}>
+        {/* Title */}
+        <Text numberOfLines={2} style={styles.cardTitle}>
+          {campaign.title}
+        </Text>
+
+        {/* Description / Subtitle */}
+        <Text numberOfLines={2} style={styles.cardDescription}>
+          {description}
+        </Text>
+
+        {/* Progress Bar */}
+        <View style={styles.progressBarTrack}>
+          <View style={[styles.progressBarFill, { width: `${Math.max(percent, 4)}%` }]} />
+        </View>
+
+        {/* Metrics Row: Raised & Percentage */}
+        <View style={styles.metricsRow}>
+          <Text style={styles.raisedNumber}>
+            {raisedDisplay}{' '}
+            <Text style={styles.raisedLabel}>raised</Text>
+          </Text>
+          <Text style={styles.percentText}>{percent}%</Text>
+        </View>
+
+        {/* Supporters Avatars & Count */}
+        <View style={styles.supportersRow}>
+          <View style={styles.avatarStack}>
+            {DEFAULT_SUPPORTER_AVATARS.map((uri, idx) => (
+              <ExpoImage
+                key={idx}
+                source={{ uri }}
+                style={[
+                  styles.supporterAvatar,
+                  { marginLeft: idx === 0 ? 0 : -8, zIndex: 10 - idx },
+                ]}
+                contentFit="cover"
+              />
+            ))}
+          </View>
+          <Text style={styles.supportersCountText}>
+            {supportersCount} supporters
+          </Text>
+        </View>
+
+        {/* Support Campaign Action Button */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={handleSupport}
+          style={styles.supportButton}
+        >
+          <Text style={styles.supportButtonText}>Support Campaign</Text>
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -185,11 +277,14 @@ export const CampaignCardMini: React.FC<{
     onPress={onPress}
     style={[styles.miniCard, style]}
   >
-    <Image
+    <ExpoImage
       source={{
-        uri: imageUrl || 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=400',
+        uri: resolveImageUrl(
+          imageUrl || 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=400'
+        ),
       }}
       style={styles.miniThumbnail}
+      contentFit="cover"
     />
     <View style={styles.miniContent}>
       <Text numberOfLines={1} style={styles.miniTitle}>
@@ -262,54 +357,155 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
   },
 
-  // Featured large card (Home screen)
+  // Featured large card matching reference design (Home screen)
   largeCard: {
-    height: 210,
-    borderRadius: Radii.xl,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    elevation: 4,
+  },
+  imageContainer: {
+    width: '100%',
+    height: 195,
+    borderRadius: 18,
     overflow: 'hidden',
     position: 'relative',
     backgroundColor: Colors.surfaceAlt,
-    ...Shadows.elevated,
   },
-  largeImage: {
+  coverImage: {
     width: '100%',
     height: '100%',
   },
-  largeGradientOverlay: {
+  trendingBadge: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    top: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    top: 12,
+    left: 12,
+    backgroundColor: '#059669',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  largeContentOverlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    top: 0,
-    padding: Spacing.md,
-    justifyContent: 'space-between',
-  },
-  largeTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  trendingBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
   largeHeartCircle: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
     width: 32,
     height: 32,
-    borderRadius: Radii.full,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  largeTitle: {
-    fontSize: Typography.sizes.lg,
-    fontWeight: Typography.weights.bold,
+  cardBody: {
+    paddingHorizontal: 4,
+    paddingTop: 14,
+    paddingBottom: 2,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#111827',
+    lineHeight: 26,
+    letterSpacing: -0.4,
+  },
+  cardDescription: {
+    fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 20,
+    marginTop: 6,
+    marginBottom: 16,
+  },
+  progressBarTrack: {
+    width: '100%',
+    height: 7,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#059669',
+    borderRadius: 4,
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  raisedNumber: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  raisedLabel: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#6B7280',
+  },
+  percentText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  supportersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  avatarStack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  supporterAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    backgroundColor: '#E5E7EB',
+  },
+  supportersCountText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#4B5563',
+    marginLeft: 8,
+  },
+  supportButton: {
+    backgroundColor: '#059669',
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  supportButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
     color: '#FFFFFF',
-    lineHeight: 24,
+    letterSpacing: 0.2,
   },
 
   // Mini summary card (Contribute & Confirmation screen)

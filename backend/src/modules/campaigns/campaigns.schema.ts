@@ -21,7 +21,7 @@ export const campaignBasicsSchema = z.object({
   title: z
     .string()
     .min(1, 'Title is required')
-    .max(60, 'Title must be 60 characters or fewer'),
+    .max(100, 'Title must be 100 characters or fewer'),
   category: z.enum(campaignCategories, {
     message: 'Please select a valid category',
   }),
@@ -29,50 +29,47 @@ export const campaignBasicsSchema = z.object({
     .string()
     .min(1, 'Creator or organization name is required')
     .max(100),
-  summary: z.string().max(500).optional().nullable(),
-  coverImageUrl: z.string().url().optional().nullable(),
+  summary: z.string().max(500).optional().nullable().or(z.literal('')),
+  coverImageUrl: z.string().url().optional().nullable().or(z.literal('')),
 });
 
 // ─── Step 2: Story ──────────────────────────────────────────────────────────────
 
 const storySectionSchema = z.object({
-  id: z.string(),
-  type: z.enum(['text', 'image', 'statistic', 'heading']),
-  content: z.string().optional(),
-  imageUrl: z.string().url().optional(),
-  caption: z.string().optional(),
-  credit: z.string().optional(),
-  value: z.string().optional(),
-  label: z.string().optional(),
-  sortOrder: z.number().int().optional(),
+  id: z.string().optional(),
+  type: z.enum(['text', 'image', 'statistic', 'heading', 'quote']).default('text'),
+  content: z.string().optional().nullable(),
+  imageUrl: z.string().url().optional().nullable().or(z.literal('')),
+  caption: z.string().optional().nullable(),
+  credit: z.string().optional().nullable(),
+  value: z.string().optional().nullable(),
+  label: z.string().optional().nullable(),
+  sortOrder: z.number().int().optional().default(0),
+});
+
+const sourceItemSchema = z.object({
+  title: z.string().max(200).optional().nullable().or(z.literal('')),
+  url: z.string().url().optional().nullable().or(z.literal('')),
 });
 
 export const campaignStorySchema = z.object({
-  headline: z.string().max(200).optional().nullable(),
-  introText: z.string().max(2000).optional().nullable(),
+  headline: z.string().max(200).optional().nullable().or(z.literal('')),
+  introText: z.string().max(2000).optional().nullable().or(z.literal('')),
   storyContent: z.array(storySectionSchema).optional().nullable(),
-  sources: z
-    .array(
-      z.object({
-        title: z.string().min(1).max(200),
-        url: z.string().url(),
-      })
-    )
-    .optional()
-    .nullable(),
-  suggestedActions: z.string().max(1000).optional().nullable(),
+  sources: z.array(sourceItemSchema).optional().nullable(),
+  suggestedActions: z.string().max(1000).optional().nullable().or(z.literal('')),
 });
 
 // ─── Step 3: Visuals ────────────────────────────────────────────────────────────
 
 const creativeSchema = z.object({
-  type: z.enum(['cover', 'ad_image', 'video']),
-  url: z.string().url(),
-  headline: z.string().max(90).optional().nullable(),
-  description: z.string().max(300).optional().nullable(),
-  callToAction: z.string().max(30).optional().nullable(),
-  caption: z.string().max(200).optional().nullable(),
-  credit: z.string().max(100).optional().nullable(),
+  type: z.enum(['cover', 'ad_image', 'video']).default('cover'),
+  url: z.string().url().optional().nullable().or(z.literal('')),
+  headline: z.string().max(90).optional().nullable().or(z.literal('')),
+  description: z.string().max(300).optional().nullable().or(z.literal('')),
+  callToAction: z.string().max(30).optional().nullable().or(z.literal('')),
+  caption: z.string().max(200).optional().nullable().or(z.literal('')),
+  credit: z.string().max(100).optional().nullable().or(z.literal('')),
   sortOrder: z.number().int().default(0),
 });
 
@@ -107,7 +104,7 @@ export const campaignSubmitSchema = z.object({
 
 export const updateCampaignSchema = z.object({
   // Basics
-  title: z.string().min(1).max(60).optional(),
+  title: z.string().min(1).max(100).optional(),
   category: z.enum(campaignCategories).optional(),
   creatorName: z.string().min(1).max(100).optional(),
   summary: z.string().max(500).optional().nullable(),

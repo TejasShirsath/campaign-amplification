@@ -40,9 +40,7 @@ const initialDraftState: DraftState = {
     storyContent: [
       { id: '1', type: 'text', content: '' },
     ],
-    sources: [
-      { title: '', url: '' },
-    ],
+    sources: [],
     suggestedActions: '',
   },
   visuals: {
@@ -77,6 +75,8 @@ interface DraftContextType {
   updateVisuals: (data: Partial<CampaignVisualsInput>) => void;
   updateReach: (data: Partial<CampaignReachInput>) => void;
   updateSubmit: (data: Partial<CampaignSubmitInput>) => void;
+  updateCoverImage: (url: string) => void;
+  updateAdImage: (url: string) => void;
   saveCurrentStep: (stepNumber: number) => Promise<boolean>;
   loadDraftFromBackend: (campaignId: string) => Promise<void>;
   resetDraft: () => Promise<void>;
@@ -89,6 +89,8 @@ const DraftContext = createContext<DraftContextType>({
   updateVisuals: () => {},
   updateReach: () => {},
   updateSubmit: () => {},
+  updateCoverImage: () => {},
+  updateAdImage: () => {},
   saveCurrentStep: async () => false,
   loadDraftFromBackend: async () => {},
   resetDraft: async () => {},
@@ -122,43 +124,120 @@ export const DraftProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const updateBasics = (data: Partial<CampaignBasicsInput>) => {
-    const updated = {
-      ...draft,
-      basics: { ...draft.basics, ...data },
-    };
-    persistLocally(updated);
+    setDraft((prev) => {
+      const updated = {
+        ...prev,
+        basics: { ...prev.basics, ...data },
+      };
+      AsyncStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
   };
 
   const updateStory = (data: Partial<CampaignStoryInput>) => {
-    const updated = {
-      ...draft,
-      story: { ...draft.story, ...data },
-    };
-    persistLocally(updated);
+    setDraft((prev) => {
+      const updated = {
+        ...prev,
+        story: { ...prev.story, ...data },
+      };
+      AsyncStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
   };
 
   const updateVisuals = (data: Partial<CampaignVisualsInput>) => {
-    const updated = {
-      ...draft,
-      visuals: { ...draft.visuals, ...data },
-    };
-    persistLocally(updated);
+    setDraft((prev) => {
+      const updated = {
+        ...prev,
+        visuals: { ...prev.visuals, ...data },
+      };
+      AsyncStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
   };
 
   const updateReach = (data: Partial<CampaignReachInput>) => {
-    const updated = {
-      ...draft,
-      reach: { ...draft.reach, ...data },
-    };
-    persistLocally(updated);
+    setDraft((prev) => {
+      const updated = {
+        ...prev,
+        reach: { ...prev.reach, ...data },
+      };
+      AsyncStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
   };
 
   const updateSubmit = (data: Partial<CampaignSubmitInput>) => {
-    const updated = {
-      ...draft,
-      submit: { ...draft.submit, ...data },
-    };
-    persistLocally(updated);
+    setDraft((prev) => {
+      const updated = {
+        ...prev,
+        submit: { ...prev.submit, ...data },
+      };
+      AsyncStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
+  };
+
+  const updateCoverImage = (url: string) => {
+    setDraft((prev) => {
+      const updatedCreatives = [...(prev.visuals?.creatives || [])];
+      if (url) {
+        updatedCreatives[0] = {
+          type: 'cover',
+          url,
+          headline: updatedCreatives[0]?.headline || prev.basics.title,
+          callToAction: 'Support Amplification',
+          sortOrder: 0,
+        };
+      } else {
+        if (updatedCreatives[0]) {
+          updatedCreatives[0] = { ...updatedCreatives[0], url: '' };
+        }
+      }
+
+      const updated: DraftState = {
+        ...prev,
+        basics: {
+          ...prev.basics,
+          coverImageUrl: url,
+        },
+        visuals: {
+          ...prev.visuals,
+          creatives: updatedCreatives,
+        },
+      };
+      AsyncStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
+  };
+
+  const updateAdImage = (url: string) => {
+    setDraft((prev) => {
+      const updatedCreatives = [...(prev.visuals?.creatives || [])];
+      if (url) {
+        updatedCreatives[1] = {
+          type: 'ad_image',
+          url,
+          headline: updatedCreatives[0]?.headline || prev.basics.title,
+          callToAction: 'Support Amplification',
+          sortOrder: 1,
+        };
+      } else {
+        if (updatedCreatives.length > 1) {
+          updatedCreatives.splice(1, 1);
+        }
+      }
+
+      const updated: DraftState = {
+        ...prev,
+        visuals: {
+          ...prev.visuals,
+          creatives: updatedCreatives,
+        },
+      };
+      AsyncStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
   };
 
   const saveCurrentStep = async (stepNumber: number): Promise<boolean> => {
@@ -168,24 +247,93 @@ export const DraftProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       if (stepNumber === 1) {
         if (!currentCampaignId) {
-          // Initialize Draft (Step 0 / 1)
           const res = await creationApi.createDraft({
-            ...draft.basics,
+            title: draft.basics.title.trim(),
+            category: draft.basics.category || 'ENVIRONMENT',
             creatorName: draft.basics.creatorName || 'Campaign Creator',
-            summary: draft.basics.summary || 'Campaign summary description',
+            summary: draft.basics.summary || '',
+            coverImageUrl: draft.basics.coverImageUrl || '',
           });
           currentCampaignId = res.id;
         } else {
-          await creationApi.updateBasics(currentCampaignId, draft.basics);
+          await creationApi.updateBasics(currentCampaignId, {
+            ...draft.basics,
+            title: draft.basics.title.trim(),
+            category: draft.basics.category || 'ENVIRONMENT',
+            creatorName: draft.basics.creatorName || 'Campaign Creator',
+            summary: draft.basics.summary || '',
+          });
         }
       } else if (stepNumber === 2 && currentCampaignId) {
-        await creationApi.updateStory(currentCampaignId, draft.story);
+        const sourceUrl = draft.story.sources?.[0]?.url?.trim();
+        const cleanSources = sourceUrl
+          ? [{ title: 'Supporting Reference', url: sourceUrl }]
+          : [];
+        const storyText = draft.story.introText?.trim() || '';
+
+        await creationApi.updateStory(currentCampaignId, {
+          headline: draft.basics.title || 'Campaign Story',
+          introText: storyText,
+          storyContent: [
+            {
+              id: '1',
+              type: 'text',
+              content: storyText,
+            },
+          ],
+          sources: cleanSources,
+        });
       } else if (stepNumber === 3 && currentCampaignId) {
-        await creationApi.updateVisuals(currentCampaignId, draft.visuals);
+        const coverUrl =
+          draft.basics.coverImageUrl?.trim() ||
+          draft.visuals.creatives[0]?.url?.trim() ||
+          'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800';
+
+        const adUrl = draft.visuals.creatives[1]?.url?.trim();
+        const adHeadline =
+          draft.visuals.creatives[0]?.headline?.trim() || draft.basics.title;
+
+        const creatives: any[] = [
+          {
+            type: 'cover',
+            url: coverUrl,
+            headline: adHeadline || 'Campaign Visual',
+            callToAction: 'Support Amplification',
+            sortOrder: 0,
+          },
+        ];
+
+        if (adUrl) {
+          creatives.push({
+            type: 'ad_image',
+            url: adUrl,
+            headline: adHeadline || 'Campaign Ad',
+            callToAction: 'Support Amplification',
+            sortOrder: 1,
+          });
+        }
+
+        await creationApi.updateBasics(currentCampaignId, {
+          ...draft.basics,
+          coverImageUrl: coverUrl,
+        });
+
+        await creationApi.updateVisuals(currentCampaignId, { creatives });
       } else if (stepNumber === 4 && currentCampaignId) {
-        await creationApi.updateReach(currentCampaignId, draft.reach);
+        await creationApi.updateReach(currentCampaignId, {
+          targetLocations: draft.reach.targetLocations?.length
+            ? draft.reach.targetLocations
+            : ['All India'],
+          audienceInterests: draft.reach.audienceInterests || [],
+          distributionChannels: ['Instagram', 'YouTube', 'Social Feeds'],
+          campaignDuration: 30,
+        });
       } else if (stepNumber === 5 && currentCampaignId) {
-        await creationApi.submitCampaign(currentCampaignId, draft.submit);
+        await creationApi.submitCampaign(currentCampaignId, {
+          fundingGoalPaise: draft.submit.fundingGoalPaise || 5000000,
+          estimatedReach: draft.submit.estimatedReach || 65000,
+          agreedToTerms: draft.submit.agreedToTerms,
+        });
       }
 
       const updated: DraftState = {
@@ -263,6 +411,8 @@ export const DraftProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateVisuals,
         updateReach,
         updateSubmit,
+        updateCoverImage,
+        updateAdImage,
         saveCurrentStep,
         loadDraftFromBackend,
         resetDraft,

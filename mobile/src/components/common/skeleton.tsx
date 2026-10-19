@@ -105,35 +105,33 @@ export function SkeletonText({
 export function SkeletonCampaignCardLarge() {
   return (
     <View style={styles.cardLarge}>
-      {/* Cover Image Placeholder */}
-      <Skeleton width="100%" height={190} borderRadius={Radii.lg} style={{ marginBottom: Spacing.md }} />
-
-      {/* Category Pill & Date */}
-      <View style={styles.rowBetween}>
-        <Skeleton width={90} height={24} borderRadius={Radii.full} />
-        <Skeleton width={70} height={14} borderRadius={Radii.sm} />
-      </View>
+      {/* Inset Cover Image Placeholder */}
+      <Skeleton width="100%" height={195} borderRadius={18} style={{ marginBottom: 14 }} />
 
       {/* Title */}
-      <View style={{ marginTop: Spacing.sm, marginBottom: Spacing.md }}>
-        <Skeleton width="92%" height={20} borderRadius={Radii.sm} style={{ marginBottom: 6 }} />
-        <Skeleton width="65%" height={20} borderRadius={Radii.sm} />
-      </View>
+      <Skeleton width="85%" height={22} borderRadius={Radii.sm} style={{ marginBottom: 8 }} />
+
+      {/* Description lines */}
+      <Skeleton width="96%" height={14} borderRadius={Radii.sm} style={{ marginBottom: 6 }} />
+      <Skeleton width="70%" height={14} borderRadius={Radii.sm} style={{ marginBottom: 16 }} />
 
       {/* Progress Bar */}
-      <Skeleton width="100%" height={8} borderRadius={Radii.full} style={{ marginBottom: Spacing.sm }} />
+      <Skeleton width="100%" height={7} borderRadius={Radii.full} style={{ marginBottom: 10 }} />
 
-      {/* Metrics Row */}
+      {/* Metrics Row: Raised & Percentage */}
       <View style={styles.rowBetween}>
-        <View>
-          <Skeleton width={110} height={16} borderRadius={Radii.sm} style={{ marginBottom: 4 }} />
-          <Skeleton width={70} height={12} borderRadius={Radii.sm} />
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Skeleton width={60} height={16} borderRadius={Radii.sm} style={{ marginBottom: 4 }} />
-          <Skeleton width={80} height={12} borderRadius={Radii.sm} />
-        </View>
+        <Skeleton width={110} height={16} borderRadius={Radii.sm} />
+        <Skeleton width={40} height={16} borderRadius={Radii.sm} />
       </View>
+
+      {/* Supporters Row */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, marginBottom: 18 }}>
+        <Skeleton width={75} height={26} borderRadius={Radii.full} />
+        <Skeleton width={90} height={14} borderRadius={Radii.sm} style={{ marginLeft: 8 }} />
+      </View>
+
+      {/* Support Campaign Button */}
+      <Skeleton width="100%" height={48} borderRadius={24} />
     </View>
   );
 }
@@ -420,8 +418,8 @@ const styles = StyleSheet.create({
   },
   cardLarge: {
     backgroundColor: '#FFFFFF',
-    borderRadius: Radii.xl,
-    padding: Spacing.md,
+    borderRadius: 24,
+    padding: 14,
     borderWidth: 1,
     borderColor: '#F3F4F6',
     marginBottom: Spacing.lg,

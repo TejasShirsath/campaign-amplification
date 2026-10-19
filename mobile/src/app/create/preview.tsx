@@ -11,6 +11,7 @@ import { Colors, Spacing, Typography } from '../../constants/theme';
 import { useDraft } from '../../context/draft-context';
 import { CampaignDetail } from '../../api/campaigns';
 import { creationApi } from '../../api/creation';
+import { resolveImageUrl } from '../../constants/config';
 
 export default function CampaignPreviewScreen() {
   const router = useRouter();
@@ -58,7 +59,7 @@ export default function CampaignPreviewScreen() {
             </Text>
           </View>
 
-          <Image source={{ uri: coverUrl }} style={styles.heroImage} />
+          <Image source={{ uri: resolveImageUrl(coverUrl) }} style={styles.heroImage} />
 
           <View style={styles.body}>
             <Badge

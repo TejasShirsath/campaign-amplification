@@ -8,32 +8,54 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  Image as RNImage,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Plus, Trash2, Eye } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { Eye, Users, Check, Globe, UploadCloud, RefreshCw, Trash2, Image as ImageIcon } from 'lucide-react-native';
 import { HeaderBar } from '../../components/common/header-bar';
 import { StepStepper } from '../../components/creation/step-stepper';
-import { Input, SelectDropdown, TipCallout } from '../../components/common/input';
+import { Input, SelectDropdown } from '../../components/common/input';
 import { Button } from '../../components/common/button';
-import { Colors, Radii, Spacing, Typography } from '../../constants/theme';
+import { Colors, Radii, Shadows, Spacing, Typography } from '../../constants/theme';
 import { useDraft } from '../../context/draft-context';
+import { uploadImageFile } from '../../api/uploads';
+import { resolveImageUrl } from '../../constants/config';
 
 const CATEGORY_OPTIONS = [
-  { label: 'Environment', value: 'ENVIRONMENT' },
+  { label: 'Environment & Climate', value: 'ENVIRONMENT' },
   { label: 'Healthcare & Wellbeing', value: 'HEALTH' },
-  { label: 'Science & Research', value: 'SCIENCE' },
   { label: 'Education & Literacy', value: 'EDUCATION' },
+  { label: 'Science & Research', value: 'SCIENCE' },
   { label: 'Public Policy', value: 'PUBLIC_POLICY' },
   { label: 'Community & Civic', value: 'COMMUNITY' },
   { label: 'Business & Economy', value: 'BUSINESS' },
   { label: 'Arts & Culture', value: 'ARTS_CULTURE' },
 ];
 
-const DURATION_OPTIONS = [15, 30, 45, 60];
+const LOCATION_OPTIONS = [
+  'All India',
+  'Mumbai',
+  'Delhi NCR',
+  'Bangalore',
+  'Pune',
+  'Hyderabad',
+  'Chennai',
+  'Kolkata',
+];
 
-const CHANNEL_OPTIONS = ['Instagram', 'YouTube', 'Local Transit Screens', 'Google Display'];
-const LOCATION_OPTIONS = ['Mumbai', 'Delhi NCR', 'Pune', 'Bangalore', 'Maharashtra', 'All India'];
-const INTEREST_OPTIONS = ['Environmental Conservation', 'Public Welfare', 'Youth Education', 'Clean Water', 'Renewable Energy'];
+const INTEREST_OPTIONS = [
+  'Sustainability',
+  'Education',
+  'Healthcare',
+  'Public Welfare',
+  'Clean Energy',
+  'Civic Action',
+  'Science & Tech',
+];
+
+const FUNDING_PRESETS = [10000, 25000, 50000, 100000];
 
 export default function CreateStepScreen() {
   const router = useRouter();
@@ -47,32 +69,111 @@ export default function CreateStepScreen() {
     updateVisuals,
     updateReach,
     updateSubmit,
+    updateCoverImage,
+    updateAdImage,
     saveCurrentStep,
   } = useDraft();
 
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [customLocation, setCustomLocation] = useState('');
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [uploadingAd, setUploadingAd] = useState(false);
 
-  // Step 1 validation & save
+  // Image picker & uploader
+  const pickAndUploadImage = async (target: 'cover' | 'ad') => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert(
+          'Permission Required',
+          'Please allow access to your photos to upload campaign images.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: target === 'cover' ? [16, 9] : [1, 1],
+        quality: 0.85,
+        base64: true,
+      });
+
+      if (result.canceled || !result.assets || !result.assets[0]) {
+        return;
+      }
+
+      const asset = result.assets[0];
+
+      if (target === 'cover') {
+        setUploadingCover(true);
+      } else {
+        setUploadingAd(true);
+      }
+      setErrorMsg(null);
+
+      const uploadRes = await uploadImageFile(asset);
+      const uploadedUrl = uploadRes.url;
+
+      if (target === 'cover') {
+        updateCoverImage(uploadedUrl);
+      } else {
+        updateAdImage(uploadedUrl);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to upload image. Please try again.');
+    } finally {
+      setUploadingCover(false);
+      setUploadingAd(false);
+    }
+  };
+
+  // Validation & step advancement
   const handleNext = async () => {
     setErrorMsg(null);
+
+    // 1. Basics validation
     if (stepNumber === 1) {
       if (!draft.basics.title.trim()) {
         setErrorMsg('Please enter a campaign title');
         return;
       }
-      if (!draft.basics.summary.trim()) {
-        setErrorMsg('Please enter a short description');
+    }
+
+    // 2. Story validation
+    if (stepNumber === 2) {
+      if (!draft.story.introText?.trim()) {
+        setErrorMsg('Please share your story');
         return;
       }
-    } else if (stepNumber === 2) {
-      if (!draft.story.headline?.trim() && !draft.basics.title) {
-        setErrorMsg('Please enter a headline for the campaign story');
+    }
+
+    // 3. Visuals validation
+    if (stepNumber === 3) {
+      const coverUrl =
+        draft.basics.coverImageUrl?.trim() || draft.visuals.creatives[0]?.url?.trim();
+      if (!coverUrl) {
+        setErrorMsg('Please upload a campaign cover image to proceed');
         return;
       }
-    } else if (stepNumber === 5) {
+    }
+
+    // 4. Reach validation
+    if (stepNumber === 4) {
+      if (!draft.reach.targetLocations?.length) {
+        updateReach({ targetLocations: ['All India'] });
+      }
+    }
+
+    // 5. Submit validation
+    if (stepNumber === 5) {
       if (!draft.submit.agreedToTerms) {
-        setErrorMsg('You must agree to the terms to submit');
+        setErrorMsg('You must agree to the campaign guidelines to submit');
+        return;
+      }
+      if ((draft.submit.fundingGoalPaise || 0) < 10000) {
+        setErrorMsg('Funding goal must be at least ₹100');
         return;
       }
     }
@@ -80,6 +181,7 @@ export default function CreateStepScreen() {
     try {
       setSaving(true);
       await saveCurrentStep(stepNumber);
+
       if (stepNumber < 5) {
         router.push(`/create/${stepNumber + 1}` as any);
       } else {
@@ -95,11 +197,30 @@ export default function CreateStepScreen() {
         );
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to save step. Please check required fields.');
+      const detailsMsg = err.details?.length
+        ? ': ' +
+          err.details
+            .map((d: any) => `${d.field ? d.field + ': ' : ''}${d.message}`)
+            .join(', ')
+        : '';
+      setErrorMsg(
+        (err.message || 'Failed to save step. Please check required fields.') + detailsMsg
+      );
     } finally {
       setSaving(false);
     }
   };
+
+  // Cover image helper
+  const activeCoverImage =
+    draft.basics.coverImageUrl ||
+    draft.visuals.creatives[0]?.url ||
+    '';
+
+  // Estimated reach calculation helper
+  const fundingInRupees = Math.round((draft.submit.fundingGoalPaise || 5000000) / 100);
+  const calculatedReachMin = Math.round(fundingInRupees * 0.85);
+  const calculatedReachMax = Math.round(fundingInRupees * 1.6);
 
   return (
     <KeyboardAvoidingView
@@ -143,17 +264,17 @@ export default function CreateStepScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* STEP 1: BASICS matching Screen 5 in reference */}
+        {/* ─── 1. BASICS ─── */}
         {stepNumber === 1 && (
           <View>
-            <Text style={styles.stepTitle}>Let's start with the basics</Text>
+            <Text style={styles.stepTitle}>Let's start with your idea.</Text>
             <Text style={styles.stepSubtitle}>
-              Give your campaign a clear and compelling foundation.
+              Give your campaign a clear foundation so people immediately understand your message.
             </Text>
 
             <Input
               label="Campaign title"
-              placeholder="e.g. Clean Rivers Brighter Futures"
+              placeholder="What is your message?"
               value={draft.basics.title}
               maxLength={100}
               showCharCount
@@ -168,155 +289,202 @@ export default function CreateStepScreen() {
             />
 
             <Input
-              label="Short description"
-              placeholder="Briefly describe your campaign and the message you want to amplify."
+              label="Short description (optional)"
+              placeholder="Describe your campaign in one sentence."
               value={draft.basics.summary}
               multiline
               maxLength={300}
               showCharCount
               onChangeText={(text) => updateBasics({ summary: text })}
             />
-
-            <Input
-              label="Cover image URL"
-              placeholder="https://images.unsplash.com/..."
-              value={draft.basics.coverImageUrl}
-              onChangeText={(text) => updateBasics({ coverImageUrl: text })}
-            />
-
-            <TipCallout text="A clear and specific title and description helps attract the right audience." />
           </View>
         )}
 
-        {/* STEP 2: STORY */}
+        {/* ─── 2. STORY ─── */}
         {stepNumber === 2 && (
           <View>
-            <Text style={styles.stepTitle}>Tell your story</Text>
+            <Text style={styles.stepTitle}>Tell people why it matters.</Text>
             <Text style={styles.stepSubtitle}>
               Share the context, facts, and why this public interest message needs amplification.
             </Text>
 
             <Input
-              label="Headline"
-              placeholder="e.g. Children in rural schools walk 3km for drinking water"
-              value={draft.story.headline}
-              onChangeText={(text) => updateStory({ headline: text })}
+              label="Your story"
+              placeholder="What should people know, and why does it matter?"
+              value={draft.story.introText}
+              multiline
+              style={styles.storyInput}
+              onChangeText={(text) =>
+                updateStory({
+                  introText: text,
+                  headline: draft.basics.title,
+                })
+              }
             />
 
             <Input
-              label="Introduction / Key Context"
-              placeholder="Over 50 schools currently lack working water filters, impacting over 8,000 students."
-              value={draft.story.introText}
-              multiline
-              onChangeText={(text) => updateStory({ introText: text })}
-            />
-
-            <Text style={styles.fieldSectionLabel}>Story Content Blocks</Text>
-            {draft.story.storyContent?.map((block, idx) => (
-              <View key={block.id || idx} style={styles.blockRow}>
-                <Input
-                  placeholder="Detail your message, key facts or solution..."
-                  value={block.content}
-                  multiline
-                  style={{ minHeight: 70 }}
-                  containerStyle={{ flex: 1 }}
-                  onChangeText={(text) => {
-                    const updated = [...(draft.story.storyContent || [])];
-                    updated[idx] = { ...updated[idx], content: text };
-                    updateStory({ storyContent: updated });
-                  }}
-                />
-                {draft.story.storyContent!.length > 1 && (
-                  <TouchableOpacity
-                    onPress={() => {
-                      const updated = draft.story.storyContent!.filter((_, i) => i !== idx);
-                      updateStory({ storyContent: updated });
-                    }}
-                    style={styles.deleteBlockBtn}
-                  >
-                    <Trash2 size={16} color={Colors.error} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
-
-            <TouchableOpacity
-              onPress={() => {
-                const updated = [
-                  ...(draft.story.storyContent || []),
-                  { id: String(Date.now()), type: 'text' as const, content: '' },
-                ];
-                updateStory({ storyContent: updated });
+              label="Supporting source (optional)"
+              placeholder="Add a URL or reference (e.g. https://example.org/report)"
+              value={draft.story.sources?.[0]?.url || ''}
+              autoCapitalize="none"
+              keyboardType="url"
+              onChangeText={(text) => {
+                updateStory({
+                  sources: text.trim() ? [{ title: 'Supporting Reference', url: text.trim() }] : [],
+                });
               }}
-              style={styles.addBlockBtn}
-            >
-              <Plus size={16} color={Colors.primary} />
-              <Text style={styles.addBlockText}>Add Story Paragraph</Text>
-            </TouchableOpacity>
-
-            <TipCallout text="Campaigns with verified facts and clear stories raise 3x faster than generic appeals." />
+            />
           </View>
         )}
 
-        {/* STEP 3: VISUALS */}
+        {/* ─── 3. VISUALS ─── */}
         {stepNumber === 3 && (
           <View>
-            <Text style={styles.stepTitle}>Campaign & Ad Visuals</Text>
+            <Text style={styles.stepTitle}>Give your message a visual identity.</Text>
             <Text style={styles.stepSubtitle}>
-              Upload or link creatives that will be served as advertisements across networks.
+              Visuals grab attention and power digital advertisements across channels.
             </Text>
 
-            {draft.visuals.creatives.map((creative, idx) => (
-              <View key={idx} style={styles.creativeCard}>
-                <Text style={styles.creativeCardLabel}>
-                  {creative.type === 'cover' ? 'Primary Ad Creative' : `Ad Creative #${idx + 1}`}
-                </Text>
-                <Input
-                  label="Image URL"
-                  placeholder="https://images.unsplash.com/..."
-                  value={creative.url}
-                  onChangeText={(text) => {
-                    const updated = [...draft.visuals.creatives];
-                    updated[idx] = { ...updated[idx], url: text };
-                    updateVisuals({ creatives: updated });
-                  }}
-                />
-                <Input
-                  label="Ad Headline"
-                  placeholder="e.g. Pure Water for Every Student"
-                  value={creative.headline}
-                  onChangeText={(text) => {
-                    const updated = [...draft.visuals.creatives];
-                    updated[idx] = { ...updated[idx], headline: text };
-                    updateVisuals({ creatives: updated });
-                  }}
-                />
-                <Input
-                  label="Call to Action Label"
-                  placeholder="e.g. Support Distribution"
-                  value={creative.callToAction}
-                  onChangeText={(text) => {
-                    const updated = [...draft.visuals.creatives];
-                    updated[idx] = { ...updated[idx], callToAction: text };
-                    updateVisuals({ creatives: updated });
-                  }}
-                />
-              </View>
-            ))}
+            {/* Campaign Cover Image */}
+            <Text style={styles.fieldLabel}>Campaign image</Text>
+            <Text style={styles.fieldSubtitle}>
+              Upload a cover image for your campaign.
+            </Text>
 
-            <TipCallout text="High quality 16:9 and 1:1 visuals perform best on Instagram and public display ads." />
+            {uploadingCover ? (
+              <View style={styles.uploadingBox}>
+                <ActivityIndicator size="small" color={Colors.primary} />
+                <Text style={styles.uploadingText}>Uploading cover image...</Text>
+              </View>
+            ) : activeCoverImage ? (
+              <View style={styles.uploadedContainer}>
+                <RNImage
+                  source={{ uri: resolveImageUrl(activeCoverImage) }}
+                  style={styles.uploadedImagePreview}
+                  resizeMode="cover"
+                />
+                <View style={styles.uploadedActionOverlay}>
+                  <TouchableOpacity
+                    style={styles.changeImageBtn}
+                    activeOpacity={0.8}
+                    onPress={() => pickAndUploadImage('cover')}
+                  >
+                    <RefreshCw size={13} color="#FFFFFF" />
+                    <Text style={styles.changeImageBtnText}>Change Image</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.removeImageBtn}
+                    activeOpacity={0.8}
+                    onPress={() => updateCoverImage('')}
+                  >
+                    <Trash2 size={13} color="#EF4444" />
+                    <Text style={styles.removeImageBtnText}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.uploadDropzone}
+                activeOpacity={0.7}
+                onPress={() => pickAndUploadImage('cover')}
+              >
+                <View style={styles.uploadIconCircle}>
+                  <UploadCloud size={24} color={Colors.primary} />
+                </View>
+                <Text style={styles.uploadTitle}>Upload cover image</Text>
+                <Text style={styles.uploadSubtext}>JPG, PNG, or WebP from your device</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Advertisement (optional) */}
+            <Text style={[styles.fieldLabel, { marginTop: Spacing.md }]}>
+              Advertisement (optional)
+            </Text>
+            <Text style={styles.fieldSubtitle}>
+              Upload an ad image or video creative for social distribution.
+            </Text>
+
+            {uploadingAd ? (
+              <View style={styles.uploadingBox}>
+                <ActivityIndicator size="small" color={Colors.primary} />
+                <Text style={styles.uploadingText}>Uploading advertisement...</Text>
+              </View>
+            ) : draft.visuals.creatives[1]?.url ? (
+              <View style={styles.uploadedContainer}>
+                <RNImage
+                  source={{ uri: resolveImageUrl(draft.visuals.creatives[1].url) }}
+                  style={styles.uploadedImagePreview}
+                  resizeMode="cover"
+                />
+                <View style={styles.uploadedActionOverlay}>
+                  <TouchableOpacity
+                    style={styles.changeImageBtn}
+                    activeOpacity={0.8}
+                    onPress={() => pickAndUploadImage('ad')}
+                  >
+                    <RefreshCw size={13} color="#FFFFFF" />
+                    <Text style={styles.changeImageBtnText}>Change Ad Image</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.removeImageBtn}
+                    activeOpacity={0.8}
+                    onPress={() => updateAdImage('')}
+                  >
+                    <Trash2 size={13} color="#EF4444" />
+                    <Text style={styles.removeImageBtnText}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.uploadDropzoneCompact}
+                activeOpacity={0.7}
+                onPress={() => pickAndUploadImage('ad')}
+              >
+                <View style={styles.uploadIconCircleSmall}>
+                  <UploadCloud size={20} color={Colors.textSecondary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.uploadTitleSmall}>Upload ad creative (optional)</Text>
+                  <Text style={styles.uploadSubtextSmall}>Square or banner image from your device</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
+            {/* Ad headline (optional) */}
+            <Input
+              label="Ad headline (optional)"
+              placeholder={`Defaults to: ${draft.basics.title || 'Campaign Title'}`}
+              value={draft.visuals.creatives[0]?.headline || ''}
+              onChangeText={(text) => {
+                const updated = [...draft.visuals.creatives];
+                if (!updated[0]) {
+                  updated[0] = {
+                    type: 'cover',
+                    url: draft.basics.coverImageUrl || '',
+                    headline: text,
+                    sortOrder: 0,
+                  };
+                } else {
+                  updated[0] = { ...updated[0], headline: text };
+                }
+                updateVisuals({ creatives: updated });
+              }}
+            />
           </View>
         )}
 
-        {/* STEP 4: REACH */}
+        {/* ─── 4. REACH ─── */}
         {stepNumber === 4 && (
           <View>
-            <Text style={styles.stepTitle}>Reach & Distribution</Text>
+            <Text style={styles.stepTitle}>Choose who you want to reach.</Text>
             <Text style={styles.stepSubtitle}>
-              Select where and how your community-funded ads will be distributed.
+              Select target geographies and audience interest areas for verified ad distribution.
             </Text>
 
-            <Text style={styles.fieldSectionLabel}>Target Locations</Text>
+            {/* Target Location */}
+            <Text style={styles.fieldLabel}>Target location</Text>
+            <Text style={styles.fieldSubtitle}>Country, state, or city:</Text>
             <View style={styles.chipsWrap}>
               {LOCATION_OPTIONS.map((loc) => {
                 const selected = draft.reach.targetLocations?.includes(loc);
@@ -325,8 +493,10 @@ export default function CreateStepScreen() {
                     key={loc}
                     onPress={() => {
                       const cur = draft.reach.targetLocations || [];
-                      const updated = selected ? cur.filter((l) => l !== loc) : [...cur, loc];
-                      updateReach({ targetLocations: updated });
+                      const updated = selected
+                        ? cur.filter((l) => l !== loc)
+                        : [...cur, loc];
+                      updateReach({ targetLocations: updated.length ? updated : ['All India'] });
                     }}
                     style={[styles.chip, selected && styles.chipActive]}
                   >
@@ -338,7 +508,35 @@ export default function CreateStepScreen() {
               })}
             </View>
 
-            <Text style={styles.fieldSectionLabel}>Audience Interests</Text>
+            <View style={styles.customLocRow}>
+              <Input
+                placeholder="Or type a custom city or region..."
+                value={customLocation}
+                containerStyle={{ flex: 1, marginBottom: 0 }}
+                onChangeText={setCustomLocation}
+              />
+              <Button
+                title="Add"
+                size="sm"
+                disabled={!customLocation.trim()}
+                onPress={() => {
+                  if (customLocation.trim()) {
+                    const cur = draft.reach.targetLocations || [];
+                    updateReach({ targetLocations: [...cur, customLocation.trim()] });
+                    setCustomLocation('');
+                  }
+                }}
+                style={styles.addLocBtn}
+              />
+            </View>
+
+            {/* Audience Interests */}
+            <Text style={[styles.fieldLabel, { marginTop: Spacing.lg }]}>
+              Audience interests (optional)
+            </Text>
+            <Text style={styles.fieldSubtitle}>
+              Focus on people passionate about specific causes:
+            </Text>
             <View style={styles.chipsWrap}>
               {INTEREST_OPTIONS.map((interest) => {
                 const selected = draft.reach.audienceInterests?.includes(interest);
@@ -362,93 +560,134 @@ export default function CreateStepScreen() {
               })}
             </View>
 
-            <Text style={styles.fieldSectionLabel}>Distribution Channels</Text>
-            <View style={styles.chipsWrap}>
-              {CHANNEL_OPTIONS.map((ch) => {
-                const selected = draft.reach.distributionChannels?.includes(ch);
-                return (
-                  <TouchableOpacity
-                    key={ch}
-                    onPress={() => {
-                      const cur = draft.reach.distributionChannels || [];
-                      const updated = selected ? cur.filter((c) => c !== ch) : [...cur, ch];
-                      updateReach({ distributionChannels: updated });
-                    }}
-                    style={[styles.chip, selected && styles.chipActive]}
-                  >
-                    <Text style={[styles.chipText, selected && styles.chipTextActive]}>
-                      {ch}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+            {/* Compact Estimated Reach Preview */}
+            <View style={styles.compactReachBox}>
+              <View style={styles.reachIconCircle}>
+                <Globe size={24} color="#059669" />
+              </View>
+              <View style={styles.reachTextBox}>
+                <Text style={styles.compactReachTitle}>
+                  ~45,000 – 85,000 people
+                </Text>
+                <Text style={styles.compactReachSub}>
+                  Estimated reach across verified digital ad networks in{' '}
+                  <Text style={{ fontWeight: '700', color: '#111827' }}>
+                    {draft.reach.targetLocations?.join(', ') || 'All India'}
+                  </Text>
+                  .
+                </Text>
+              </View>
             </View>
-
-            <Text style={styles.fieldSectionLabel}>Campaign Duration</Text>
-            <View style={styles.durationRow}>
-              {DURATION_OPTIONS.map((days) => {
-                const selected = draft.reach.campaignDuration === days;
-                return (
-                  <TouchableOpacity
-                    key={days}
-                    onPress={() => updateReach({ campaignDuration: days })}
-                    style={[styles.durationBtn, selected && styles.durationBtnActive]}
-                  >
-                    <Text
-                      style={[
-                        styles.durationBtnText,
-                        selected && styles.durationBtnTextActive,
-                      ]}
-                    >
-                      {days} Days
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <TipCallout text="30 to 45 day distribution runs generate the most consistent engagement." />
           </View>
         )}
 
-        {/* STEP 5: SUBMIT */}
+        {/* ─── 5. SUBMIT ─── */}
         {stepNumber === 5 && (
           <View>
-            <Text style={styles.stepTitle}>Review & Set Target Budget</Text>
+            <Text style={styles.stepTitle}>One last look before you submit.</Text>
             <Text style={styles.stepSubtitle}>
-              Define your amplification funding goal and projected audience reach.
+              Review your campaign preview, set your promotion goal, and submit for verification.
             </Text>
 
+            {/* Clean Campaign Preview Card */}
+            <View style={styles.previewCard}>
+              {activeCoverImage ? (
+                <RNImage
+                  source={{ uri: resolveImageUrl(activeCoverImage) }}
+                  style={styles.previewCardImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.previewCardImage, styles.previewPlaceholderBox]}>
+                  <ImageIcon size={32} color="#9CA3AF" />
+                  <Text style={styles.previewPlaceholderText}>No cover image uploaded</Text>
+                </View>
+              )}
+              <View style={styles.previewCardBody}>
+                <View style={styles.previewBadgeRow}>
+                  <View style={styles.categoryBadge}>
+                    <Text style={styles.categoryBadgeText}>
+                      {(CATEGORY_OPTIONS.find((c) => c.value === draft.basics.category)?.label) ||
+                        draft.basics.category}
+                    </Text>
+                  </View>
+                  <Text style={styles.locationTag}>
+                    📍 {draft.reach.targetLocations?.[0] || 'All India'}
+                  </Text>
+                </View>
+
+                <Text style={styles.previewCardTitle}>
+                  {draft.basics.title || 'Untitled Campaign'}
+                </Text>
+                <Text numberOfLines={3} style={styles.previewCardDesc}>
+                  {draft.basics.summary ||
+                    draft.story.introText ||
+                    'Every contribution directly powers verified digital ads to amplify this message.'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Funding Goal */}
+            <Text style={[styles.fieldLabel, { marginTop: Spacing.lg }]}>
+              Funding goal
+            </Text>
+            <Text style={styles.fieldSubtitle}>
+              “How much funding do you need for promotion?”
+            </Text>
+
+            {/* Funding Preset Chips */}
+            <View style={styles.presetsRow}>
+              {FUNDING_PRESETS.map((amount) => {
+                const isSelected = fundingInRupees === amount;
+                return (
+                  <TouchableOpacity
+                    key={amount}
+                    onPress={() => {
+                      updateSubmit({
+                        fundingGoalPaise: amount * 100,
+                        estimatedReach: Math.round(amount * 1.3),
+                      });
+                    }}
+                    style={[styles.fundingChip, isSelected && styles.fundingChipActive]}
+                  >
+                    <Text style={[styles.fundingChipText, isSelected && styles.fundingChipTextActive]}>
+                      ₹{amount.toLocaleString('en-IN')}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
             <Input
-              label="Funding Goal (in Rupees)"
+              label="Or enter custom amount (₹)"
               placeholder="50000"
               keyboardType="numeric"
-              value={String(Math.round(draft.submit.fundingGoalPaise / 100))}
+              value={String(fundingInRupees)}
               onChangeText={(text) => {
                 const val = parseInt(text.replace(/[^0-9]/g, '') || '0', 10);
-                const reachEstimate = val * 25; // ~25 people reached per rupee funded
                 updateSubmit({
                   fundingGoalPaise: val * 100,
-                  estimatedReach: reachEstimate,
+                  estimatedReach: Math.round(val * 1.3),
                 });
               }}
             />
 
-            <View style={styles.reachEstimateBox}>
-              <Text style={styles.reachEstimateTitle}>Projected Estimated Reach</Text>
-              <Text style={styles.reachEstimateValue}>
-                ~ {draft.submit.estimatedReach.toLocaleString('en-IN')} people
-              </Text>
-              <Text style={styles.reachEstimateSub}>
-                Based on current cost per thousand impressions (CPM) in selected target channels. Non-guaranteed estimate.
+            {/* Reach Projection Banner */}
+            <View style={styles.projectionBanner}>
+              <Users size={20} color="#059669" />
+              <Text style={styles.projectionText}>
+                Projected reach:{' '}
+                <Text style={{ fontWeight: '800', color: '#059669' }}>
+                  ~{calculatedReachMin.toLocaleString('en-IN')} – {calculatedReachMax.toLocaleString('en-IN')} people
+                </Text>
               </Text>
             </View>
 
-            {/* Terms and non-donation acknowledgment checkbox */}
+            {/* One Simple Guidelines & Non-Donation Checkbox */}
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => updateSubmit({ agreedToTerms: !draft.submit.agreedToTerms })}
-              style={styles.termsRow}
+              style={styles.termsBox}
             >
               <View
                 style={[
@@ -457,23 +696,28 @@ export default function CreateStepScreen() {
                 ]}
               >
                 {draft.submit.agreedToTerms && (
-                  <Text style={styles.checkboxCheckmark}>✓</Text>
+                  <Check size={14} color="#FFFFFF" strokeWidth={3} />
                 )}
               </View>
               <Text style={styles.termsText}>
-                I understand that this fund is exclusively for message distribution and ad amplification, not a direct donation. I agree to the platform amplification terms.
+                I agree to the campaign guidelines and understand that contributions fund message distribution, not direct donations.
               </Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {errorMsg && <Text style={styles.errorBanner}>{errorMsg}</Text>}
+        {/* Inline Error Message */}
+        {errorMsg && (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{errorMsg}</Text>
+          </View>
+        )}
       </ScrollView>
 
-      {/* Fixed bottom Save & Continue button matching reference */}
+      {/* Fixed Bottom Action Bar */}
       <View style={styles.fixedBottomBar}>
         <Button
-          title={stepNumber === 5 ? 'Submit Campaign for Review' : 'Save and Continue'}
+          title={stepNumber === 5 ? 'Submit for Review' : 'Save and Continue'}
           showArrow={stepNumber < 5}
           loading={saving}
           onPress={handleNext}
@@ -500,7 +744,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     backgroundColor: Colors.primaryBg,
     borderRadius: Radii.full,
   },
@@ -515,185 +759,391 @@ const styles = StyleSheet.create({
     paddingBottom: 110,
   },
   stepTitle: {
-    fontSize: Typography.sizes.hero,
-    fontWeight: Typography.weights.extrabold,
+    fontSize: Typography.sizes.xl,
+    fontWeight: Typography.weights.bold,
     color: Colors.text,
-    letterSpacing: -0.5,
     marginBottom: 4,
+    letterSpacing: -0.3,
   },
   stepSubtitle: {
     fontSize: Typography.sizes.sm,
     color: Colors.textSecondary,
-    lineHeight: 20,
     marginBottom: Spacing.lg,
+    lineHeight: 20,
   },
-  fieldSectionLabel: {
+  storyInput: {
+    minHeight: 140,
+    textAlignVertical: 'top',
+  },
+  fieldLabel: {
     fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.semibold,
     color: Colors.text,
-    marginTop: Spacing.md,
+    marginBottom: 2,
+  },
+  fieldSubtitle: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
     marginBottom: Spacing.sm,
   },
-  blockRow: {
+  presetsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
+    gap: 10,
+    marginBottom: Spacing.md,
+    flexWrap: 'wrap',
   },
-  deleteBlockBtn: {
-    padding: Spacing.sm,
-  },
-  addBlockBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: Spacing.sm,
-    marginBottom: Spacing.sm,
-  },
-  addBlockText: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.primary,
-  },
-  creativeCard: {
-    backgroundColor: Colors.surfaceSubtle,
+  uploadingBox: {
+    height: 140,
+    borderRadius: Radii.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: Radii.lg,
-    padding: Spacing.md,
+    backgroundColor: Colors.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: Spacing.md,
+    gap: 10,
   },
-  creativeCardLabel: {
+  uploadingText: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textSecondary,
+    fontWeight: Typography.weights.medium,
+  },
+  uploadDropzone: {
+    height: 150,
+    borderRadius: Radii.lg,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: Colors.primary,
+    backgroundColor: '#F0FDF4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+    padding: Spacing.md,
+  },
+  uploadIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  uploadTitle: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.bold,
+    color: Colors.primary,
+    marginBottom: 2,
+  },
+  uploadSubtext: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
+  },
+  uploadDropzoneCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: Radii.lg,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: Colors.border,
+    backgroundColor: Colors.surfaceSubtle,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+    gap: 12,
+  },
+  uploadIconCircleSmall: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadTitleSmall: {
     fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.bold,
     color: Colors.text,
-    marginBottom: Spacing.sm,
+  },
+  uploadSubtextSmall: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  uploadedContainer: {
+    borderRadius: Radii.lg,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: Spacing.md,
+  },
+  uploadedImagePreview: {
+    width: '100%',
+    height: 180,
+  },
+  uploadedActionOverlay: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    gap: 10,
+  },
+  changeImageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: Radii.md,
+    backgroundColor: Colors.primary,
+  },
+  changeImageBtnText: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
+    color: '#FFFFFF',
+  },
+  removeImageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: Radii.md,
+    backgroundColor: '#FEE2E2',
+  },
+  removeImageBtnText: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
+    color: '#EF4444',
+  },
+  previewPlaceholderBox: {
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  previewPlaceholderText: {
+    fontSize: Typography.sizes.xs,
+    color: '#9CA3AF',
+    fontWeight: Typography.weights.medium,
   },
   chipsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.sm,
+    gap: 8,
     marginBottom: Spacing.md,
   },
   chip: {
-    paddingVertical: 8,
     paddingHorizontal: 14,
+    paddingVertical: 9,
     borderRadius: Radii.full,
+    backgroundColor: Colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: Colors.border,
-    backgroundColor: Colors.surface,
   },
   chipActive: {
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.primaryBg,
     borderColor: Colors.primary,
   },
   chipText: {
-    fontSize: Typography.sizes.xs,
+    fontSize: Typography.sizes.sm,
     color: Colors.textSecondary,
     fontWeight: Typography.weights.medium,
   },
   chipTextActive: {
-    color: '#FFFFFF',
-    fontWeight: Typography.weights.semibold,
+    color: Colors.primary,
+    fontWeight: Typography.weights.bold,
   },
-  durationRow: {
+  customLocRow: {
     flexDirection: 'row',
-    gap: Spacing.sm,
-    marginBottom: Spacing.lg,
-  },
-  durationBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: Radii.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
     alignItems: 'center',
+    gap: 8,
+    marginBottom: Spacing.sm,
   },
-  durationBtnActive: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primaryBg,
+  addLocBtn: {
+    height: 48,
+    paddingHorizontal: 18,
   },
-  durationBtnText: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.medium,
-    color: Colors.textSecondary,
-  },
-  durationBtnTextActive: {
-    color: Colors.primary,
-    fontWeight: Typography.weights.bold,
-  },
-  reachEstimateBox: {
-    backgroundColor: Colors.primaryBg,
-    borderRadius: Radii.lg,
-    borderWidth: 1,
-    borderColor: Colors.primaryBorder,
-    padding: Spacing.md,
-    marginVertical: Spacing.md,
-  },
-  reachEstimateTitle: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
-    color: Colors.primaryDark,
-  },
-  reachEstimateValue: {
-    fontSize: Typography.sizes.hero,
-    fontWeight: Typography.weights.extrabold,
-    color: Colors.primary,
-    marginVertical: 4,
-  },
-  reachEstimateSub: {
-    fontSize: 11,
-    color: Colors.primaryDark,
-    lineHeight: 16,
-  },
-  termsRow: {
+  compactReachBox: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.sm,
-    marginVertical: Spacing.md,
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+    marginTop: Spacing.sm,
+    gap: 14,
   },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    backgroundColor: '#FFFFFF',
+  reachIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#DCFCE7',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  reachTextBox: {
+    flex: 1,
+  },
+  compactReachTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#065F46',
+    marginBottom: 2,
+  },
+  compactReachSub: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#047857',
+  },
+  previewCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    overflow: 'hidden',
+    marginBottom: Spacing.md,
+    ...Shadows.card,
+  },
+  previewCardImage: {
+    width: '100%',
+    height: 150,
+  },
+  previewCardBody: {
+    padding: 14,
+  },
+  previewBadgeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  categoryBadge: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  categoryBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  locationTag: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  previewCardTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 4,
+    lineHeight: 22,
+  },
+  previewCardDesc: {
+    fontSize: 13,
+    color: '#4B5563',
+    lineHeight: 18,
+  },
+  fundingChip: {
+    flex: 1,
+    minWidth: '22%',
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 10,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  fundingChipActive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#059669',
+  },
+  fundingChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  fundingChipTextActive: {
+    color: '#059669',
+    fontWeight: '800',
+  },
+  projectionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F9FAFB',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: Spacing.md,
+  },
+  projectionText: {
+    fontSize: 13,
+    color: '#374151',
+  },
+  termsBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginTop: 6,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
     marginTop: 2,
   },
   checkboxChecked: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  checkboxCheckmark: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
+    backgroundColor: '#059669',
+    borderColor: '#059669',
   },
   termsText: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.textSecondary,
     flex: 1,
-    lineHeight: 18,
+    fontSize: 13,
+    color: '#374151',
+    lineHeight: 19,
+    fontWeight: '500',
   },
-  errorBanner: {
-    color: Colors.error,
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.semibold,
-    marginVertical: Spacing.sm,
+  errorBox: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    padding: 12,
+    borderRadius: 10,
+    marginTop: Spacing.md,
+  },
+  errorText: {
+    fontSize: 13,
+    color: '#DC2626',
+    lineHeight: 18,
   },
   fixedBottomBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    padding: Spacing.md,
+    paddingBottom: Platform.OS === 'ios' ? 32 : Spacing.md,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    borderTopColor: Colors.borderLight,
+    ...Shadows.card,
   },
   nextBtn: {
     width: '100%',

@@ -6,6 +6,7 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Search, SlidersHorizontal } from 'lucide-react-native';
@@ -114,6 +115,7 @@ export default function ExploreScreen() {
             placeholderTextColor={Colors.textLight}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            underlineColorAndroid="transparent"
             style={styles.searchInput}
             returnKeyType="search"
           />
@@ -214,6 +216,13 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.base,
     color: Colors.text,
     padding: 0,
+    ...(Platform.OS === 'web'
+      ? ({
+          outlineStyle: 'none',
+          outlineWidth: 0,
+          outlineColor: 'transparent',
+        } as any)
+      : {}),
   },
   filterButton: {
     width: 46,
