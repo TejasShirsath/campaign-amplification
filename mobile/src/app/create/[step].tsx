@@ -72,6 +72,7 @@ export default function CreateStepScreen() {
     updateCoverImage,
     updateAdImage,
     saveCurrentStep,
+    resetDraft,
   } = useDraft();
 
   const [saving, setSaving] = useState(false);
@@ -106,22 +107,28 @@ export default function CreateStepScreen() {
 
       const asset = result.assets[0];
 
+      // 1. Immediately show chosen image preview in the upload section
       if (target === 'cover') {
+        updateCoverImage(asset.uri);
         setUploadingCover(true);
       } else {
+        updateAdImage(asset.uri);
         setUploadingAd(true);
       }
       setErrorMsg(null);
 
+      // 2. Upload to backend
       const uploadRes = await uploadImageFile(asset);
       const uploadedUrl = uploadRes.url;
 
+      // 3. Persist uploaded server URL
       if (target === 'cover') {
         updateCoverImage(uploadedUrl);
       } else {
         updateAdImage(uploadedUrl);
       }
     } catch (err: any) {
+      console.error('Image upload failed:', err);
       setErrorMsg(err.message || 'Failed to upload image. Please try again.');
     } finally {
       setUploadingCover(false);
@@ -169,8 +176,7 @@ export default function CreateStepScreen() {
     // 5. Submit validation
     if (stepNumber === 5) {
       if (!draft.submit.agreedToTerms) {
-        setErrorMsg('You must agree to the campaign guidelines to submit');
-        return;
+        updateSubmit({ agreedToTerms: true });
       }
       if ((draft.submit.fundingGoalPaise || 0) < 10000) {
         setErrorMsg('Funding goal must be at least ₹100');
@@ -185,16 +191,25 @@ export default function CreateStepScreen() {
       if (stepNumber < 5) {
         router.push(`/create/${stepNumber + 1}` as any);
       } else {
-        Alert.alert(
-          'Campaign Submitted!',
-          'Your campaign has been successfully submitted for review and will be live shortly.',
-          [
-            {
-              text: 'View My Campaigns',
-              onPress: () => router.replace('/user/campaigns' as any),
-            },
-          ]
-        );
+        await resetDraft();
+        if (Platform.OS === 'web') {
+          // On Web, show alert if available and navigate cleanly to user campaigns
+          if (typeof window !== 'undefined') {
+            window.alert('Your campaign has been successfully submitted for review and will be live shortly.');
+          }
+          router.replace('/user/campaigns' as any);
+        } else {
+          Alert.alert(
+            'Campaign Submitted!',
+            'Your campaign has been successfully submitted for review and will be live shortly.',
+            [
+              {
+                text: 'View My Campaigns',
+                onPress: () => router.replace('/user/campaigns' as any),
+              },
+            ]
+          );
+        }
       }
     } catch (err: any) {
       const detailsMsg = err.details?.length
@@ -204,7 +219,7 @@ export default function CreateStepScreen() {
             .join(', ')
         : '';
       setErrorMsg(
-        (err.message || 'Failed to save step. Please check required fields.') + detailsMsg
+        (err.message || 'Failed to submit campaign. Please check required fields.') + detailsMsg
       );
     } finally {
       setSaving(false);
@@ -351,22 +366,26 @@ export default function CreateStepScreen() {
               Upload a cover image for your campaign.
             </Text>
 
-            {uploadingCover ? (
-              <View style={styles.uploadingBox}>
-                <ActivityIndicator size="small" color={Colors.primary} />
-                <Text style={styles.uploadingText}>Uploading cover image...</Text>
-              </View>
-            ) : activeCoverImage ? (
+            {activeCoverImage ? (
               <View style={styles.uploadedContainer}>
-                <RNImage
-                  source={{ uri: resolveImageUrl(activeCoverImage) }}
-                  style={styles.uploadedImagePreview}
-                  resizeMode="cover"
-                />
+                <View style={styles.imagePreviewWrapper}>
+                  <RNImage
+                    source={{ uri: resolveImageUrl(activeCoverImage) }}
+                    style={styles.uploadedImagePreview}
+                    resizeMode="cover"
+                  />
+                  {uploadingCover && (
+                    <View style={styles.uploadingOverlay}>
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <Text style={styles.uploadingOverlayText}>Saving upload...</Text>
+                    </View>
+                  )}
+                </View>
                 <View style={styles.uploadedActionOverlay}>
                   <TouchableOpacity
                     style={styles.changeImageBtn}
                     activeOpacity={0.8}
+                    disabled={uploadingCover}
                     onPress={() => pickAndUploadImage('cover')}
                   >
                     <RefreshCw size={13} color="#FFFFFF" />
@@ -375,12 +394,18 @@ export default function CreateStepScreen() {
                   <TouchableOpacity
                     style={styles.removeImageBtn}
                     activeOpacity={0.8}
+                    disabled={uploadingCover}
                     onPress={() => updateCoverImage('')}
                   >
                     <Trash2 size={13} color="#EF4444" />
                     <Text style={styles.removeImageBtnText}>Remove</Text>
                   </TouchableOpacity>
                 </View>
+              </View>
+            ) : uploadingCover ? (
+              <View style={styles.uploadingBox}>
+                <ActivityIndicator size="small" color={Colors.primary} />
+                <Text style={styles.uploadingText}>Uploading cover image...</Text>
               </View>
             ) : (
               <TouchableOpacity
@@ -404,22 +429,26 @@ export default function CreateStepScreen() {
               Upload an ad image or video creative for social distribution.
             </Text>
 
-            {uploadingAd ? (
-              <View style={styles.uploadingBox}>
-                <ActivityIndicator size="small" color={Colors.primary} />
-                <Text style={styles.uploadingText}>Uploading advertisement...</Text>
-              </View>
-            ) : draft.visuals.creatives[1]?.url ? (
+            {draft.visuals.creatives[1]?.url ? (
               <View style={styles.uploadedContainer}>
-                <RNImage
-                  source={{ uri: resolveImageUrl(draft.visuals.creatives[1].url) }}
-                  style={styles.uploadedImagePreview}
-                  resizeMode="cover"
-                />
+                <View style={styles.imagePreviewWrapper}>
+                  <RNImage
+                    source={{ uri: resolveImageUrl(draft.visuals.creatives[1].url) }}
+                    style={styles.uploadedImagePreview}
+                    resizeMode="cover"
+                  />
+                  {uploadingAd && (
+                    <View style={styles.uploadingOverlay}>
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <Text style={styles.uploadingOverlayText}>Saving upload...</Text>
+                    </View>
+                  )}
+                </View>
                 <View style={styles.uploadedActionOverlay}>
                   <TouchableOpacity
                     style={styles.changeImageBtn}
                     activeOpacity={0.8}
+                    disabled={uploadingAd}
                     onPress={() => pickAndUploadImage('ad')}
                   >
                     <RefreshCw size={13} color="#FFFFFF" />
@@ -428,12 +457,18 @@ export default function CreateStepScreen() {
                   <TouchableOpacity
                     style={styles.removeImageBtn}
                     activeOpacity={0.8}
+                    disabled={uploadingAd}
                     onPress={() => updateAdImage('')}
                   >
                     <Trash2 size={13} color="#EF4444" />
                     <Text style={styles.removeImageBtnText}>Remove</Text>
                   </TouchableOpacity>
                 </View>
+              </View>
+            ) : uploadingAd ? (
+              <View style={styles.uploadingBox}>
+                <ActivityIndicator size="small" color={Colors.primary} />
+                <Text style={styles.uploadingText}>Uploading advertisement...</Text>
               </View>
             ) : (
               <TouchableOpacity
@@ -716,6 +751,11 @@ export default function CreateStepScreen() {
 
       {/* Fixed Bottom Action Bar */}
       <View style={styles.fixedBottomBar}>
+        {errorMsg && (
+          <View style={[styles.errorBox, { marginBottom: Spacing.sm }]}>
+            <Text style={styles.errorText}>{errorMsg}</Text>
+          </View>
+        )}
         <Button
           title={stepNumber === 5 ? 'Submit for Review' : 'Save and Continue'}
           showArrow={stepNumber < 5}
@@ -880,6 +920,29 @@ const styles = StyleSheet.create({
   uploadedImagePreview: {
     width: '100%',
     height: 180,
+  },
+  imagePreviewWrapper: {
+    position: 'relative',
+    width: '100%',
+    height: 180,
+    backgroundColor: '#E5E7EB',
+  },
+  uploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  uploadingOverlayText: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.semibold,
+    color: '#FFFFFF',
   },
   uploadedActionOverlay: {
     flexDirection: 'row',

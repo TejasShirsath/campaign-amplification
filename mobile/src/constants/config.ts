@@ -20,9 +20,31 @@ function getApiBaseUrl(): string {
 
 export function resolveImageUrl(url?: string | null): string {
   if (!url) return '';
+  // Local blobs or base64 data URLs should be returned untouched
+  if (url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('file:')) {
+    return url;
+  }
+
+  // Derive configured API host
+  const configuredApi = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_HOST;
+  let preferredHost = 'localhost:5000';
+  try {
+    const match = configuredApi.match(/https?:\/\/([^/]+)/);
+    if (match && match[1]) {
+      preferredHost = match[1];
+    }
+  } catch {
+    // fallback
+  }
+
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      return url.replace(/http:\/\/10\.\d+\.\d+\.\d+:5000/, 'http://localhost:5000');
+      return url.replace(/http:\/\/(?:\d{1,3}\.){3}\d{1,3}:5000/, 'http://localhost:5000');
+    }
+  } else {
+    // On native devices or emulators, map localhost to the reachable IP
+    if (url.includes('localhost:5000') || url.includes('127.0.0.1:5000')) {
+      return url.replace(/http:\/\/(?:localhost|127\.0\.0\.1):5000/, `http://${preferredHost}`);
     }
   }
   return url;

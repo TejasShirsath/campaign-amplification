@@ -98,6 +98,8 @@ const DraftContext = createContext<DraftContextType>({
 
 export const DraftProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [draft, setDraft] = useState<DraftState>(initialDraftState);
+  const draftRef = React.useRef<DraftState>(initialDraftState);
+  draftRef.current = draft;
 
   // Restore cached draft on app start
   useEffect(() => {
@@ -107,6 +109,7 @@ export const DraftProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (stored) {
           const parsed = JSON.parse(stored);
           setDraft(parsed);
+          draftRef.current = parsed;
         }
       } catch (err) {
         console.warn('Failed to restore local draft:', err);
@@ -243,36 +246,37 @@ export const DraftProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const saveCurrentStep = async (stepNumber: number): Promise<boolean> => {
     setDraft((prev) => ({ ...prev, isSaving: true }));
     try {
-      let currentCampaignId = draft.campaignId;
+      const currentDraft = draftRef.current;
+      let currentCampaignId = currentDraft.campaignId;
 
       if (stepNumber === 1) {
         if (!currentCampaignId) {
           const res = await creationApi.createDraft({
-            title: draft.basics.title.trim(),
-            category: draft.basics.category || 'ENVIRONMENT',
-            creatorName: draft.basics.creatorName || 'Campaign Creator',
-            summary: draft.basics.summary || '',
-            coverImageUrl: draft.basics.coverImageUrl || '',
+            title: currentDraft.basics.title.trim(),
+            category: currentDraft.basics.category || 'ENVIRONMENT',
+            creatorName: currentDraft.basics.creatorName || 'Campaign Creator',
+            summary: currentDraft.basics.summary || '',
+            coverImageUrl: currentDraft.basics.coverImageUrl || '',
           });
           currentCampaignId = res.id;
         } else {
           await creationApi.updateBasics(currentCampaignId, {
-            ...draft.basics,
-            title: draft.basics.title.trim(),
-            category: draft.basics.category || 'ENVIRONMENT',
-            creatorName: draft.basics.creatorName || 'Campaign Creator',
-            summary: draft.basics.summary || '',
+            ...currentDraft.basics,
+            title: currentDraft.basics.title.trim(),
+            category: currentDraft.basics.category || 'ENVIRONMENT',
+            creatorName: currentDraft.basics.creatorName || 'Campaign Creator',
+            summary: currentDraft.basics.summary || '',
           });
         }
       } else if (stepNumber === 2 && currentCampaignId) {
-        const sourceUrl = draft.story.sources?.[0]?.url?.trim();
+        const sourceUrl = currentDraft.story.sources?.[0]?.url?.trim();
         const cleanSources = sourceUrl
           ? [{ title: 'Supporting Reference', url: sourceUrl }]
           : [];
-        const storyText = draft.story.introText?.trim() || '';
+        const storyText = currentDraft.story.introText?.trim() || '';
 
         await creationApi.updateStory(currentCampaignId, {
-          headline: draft.basics.title || 'Campaign Story',
+          headline: currentDraft.basics.title || 'Campaign Story',
           introText: storyText,
           storyContent: [
             {
@@ -285,13 +289,13 @@ export const DraftProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         });
       } else if (stepNumber === 3 && currentCampaignId) {
         const coverUrl =
-          draft.basics.coverImageUrl?.trim() ||
-          draft.visuals.creatives[0]?.url?.trim() ||
+          currentDraft.basics.coverImageUrl?.trim() ||
+          currentDraft.visuals.creatives[0]?.url?.trim() ||
           'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800';
 
-        const adUrl = draft.visuals.creatives[1]?.url?.trim();
+        const adUrl = currentDraft.visuals.creatives[1]?.url?.trim();
         const adHeadline =
-          draft.visuals.creatives[0]?.headline?.trim() || draft.basics.title;
+          currentDraft.visuals.creatives[0]?.headline?.trim() || currentDraft.basics.title;
 
         const creatives: any[] = [
           {
@@ -314,36 +318,112 @@ export const DraftProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
 
         await creationApi.updateBasics(currentCampaignId, {
-          ...draft.basics,
+          ...currentDraft.basics,
           coverImageUrl: coverUrl,
         });
 
         await creationApi.updateVisuals(currentCampaignId, { creatives });
       } else if (stepNumber === 4 && currentCampaignId) {
         await creationApi.updateReach(currentCampaignId, {
-          targetLocations: draft.reach.targetLocations?.length
-            ? draft.reach.targetLocations
+          targetLocations: currentDraft.reach.targetLocations?.length
+            ? currentDraft.reach.targetLocations
             : ['All India'],
-          audienceInterests: draft.reach.audienceInterests || [],
+          audienceInterests: currentDraft.reach.audienceInterests || [],
           distributionChannels: ['Instagram', 'YouTube', 'Social Feeds'],
           campaignDuration: 30,
         });
-      } else if (stepNumber === 5 && currentCampaignId) {
+      } else if (stepNumber === 5) {
+        const titleToUse = currentDraft.basics.title?.trim() || 'My Campaign';
+        const categoryToUse = currentDraft.basics.category || 'ENVIRONMENT';
+        const creatorNameToUse = currentDraft.basics.creatorName || 'Campaign Creator';
+        const coverUrl =
+          currentDraft.basics.coverImageUrl?.trim() ||
+          currentDraft.visuals.creatives[0]?.url?.trim() ||
+          'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800';
+
+        if (!currentCampaignId) {
+          const createRes = await creationApi.createDraft({
+            title: titleToUse,
+            category: categoryToUse,
+            creatorName: creatorNameToUse,
+            summary: currentDraft.basics.summary || '',
+            coverImageUrl: coverUrl,
+          });
+          currentCampaignId = createRes.id;
+        } else {
+          await creationApi.updateBasics(currentCampaignId, {
+            ...currentDraft.basics,
+            title: titleToUse,
+            category: categoryToUse,
+            creatorName: creatorNameToUse,
+            coverImageUrl: coverUrl,
+          });
+        }
+
+        // Sync story if present
+        if (currentDraft.story.introText?.trim()) {
+          const sourceUrl = currentDraft.story.sources?.[0]?.url?.trim();
+          await creationApi.updateStory(currentCampaignId, {
+            headline: titleToUse,
+            introText: currentDraft.story.introText.trim(),
+            storyContent: [
+              { id: '1', type: 'text', content: currentDraft.story.introText.trim() },
+            ],
+            sources: sourceUrl ? [{ title: 'Supporting Reference', url: sourceUrl }] : [],
+          });
+        }
+
+        // Sync visuals
+        const creatives: any[] = [
+          {
+            type: 'cover',
+            url: coverUrl,
+            headline: titleToUse,
+            callToAction: 'Support Amplification',
+            sortOrder: 0,
+          },
+        ];
+        if (currentDraft.visuals.creatives[1]?.url?.trim()) {
+          creatives.push({
+            type: 'ad_image',
+            url: currentDraft.visuals.creatives[1].url.trim(),
+            headline: titleToUse,
+            callToAction: 'Support Amplification',
+            sortOrder: 1,
+          });
+        }
+        await creationApi.updateVisuals(currentCampaignId, { creatives });
+
+        // Sync reach
+        await creationApi.updateReach(currentCampaignId, {
+          targetLocations: currentDraft.reach.targetLocations?.length
+            ? currentDraft.reach.targetLocations
+            : ['All India'],
+          audienceInterests: currentDraft.reach.audienceInterests || [],
+          distributionChannels: ['Instagram', 'YouTube', 'Social Feeds'],
+          campaignDuration: currentDraft.reach.campaignDuration || 30,
+        });
+
+        // Submit for review
         await creationApi.submitCampaign(currentCampaignId, {
-          fundingGoalPaise: draft.submit.fundingGoalPaise || 5000000,
-          estimatedReach: draft.submit.estimatedReach || 65000,
-          agreedToTerms: draft.submit.agreedToTerms,
+          fundingGoalPaise: currentDraft.submit.fundingGoalPaise || 5000000,
+          estimatedReach: currentDraft.submit.estimatedReach || 65000,
+          agreedToTerms: true,
         });
       }
 
-      const updated: DraftState = {
-        ...draft,
-        campaignId: currentCampaignId,
-        currentStep: Math.min(stepNumber + 1, 5),
-        isSaving: false,
-        lastSavedAt: new Date().toISOString(),
-      };
-      await persistLocally(updated);
+      setDraft((prev) => {
+        const updated: DraftState = {
+          ...prev,
+          campaignId: currentCampaignId,
+          currentStep: Math.min(stepNumber + 1, 5),
+          isSaving: false,
+          lastSavedAt: new Date().toISOString(),
+        };
+        AsyncStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+        draftRef.current = updated;
+        return updated;
+      });
       return true;
     } catch (err: any) {
       console.warn(`Error saving step ${stepNumber}:`, err);

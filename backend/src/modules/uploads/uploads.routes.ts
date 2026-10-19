@@ -38,8 +38,13 @@ const upload = multer({
   },
 });
 
-// Middleware to accept either 'file' or 'image' field
+// Middleware to accept either 'file' or 'image' field for multipart
 const uploadMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  const contentType = req.headers['content-type'] || '';
+  if (!contentType.includes('multipart/form-data')) {
+    return next();
+  }
+
   const handler = upload.fields([
     { name: 'file', maxCount: 1 },
     { name: 'image', maxCount: 1 },
