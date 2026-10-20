@@ -1,11 +1,20 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import pg from 'pg';
 import { env } from '../config/env.js';
 
+const { Pool } = pg;
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
 function createPrismaClient(): PrismaClient {
-  const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
+  const isCloudOrProduction = env.NODE_ENV === 'production' || !!process.env.VERCEL;
+
+  const pool = new Pool({
+    connectionString: env.DATABASE_URL,
+    ssl: isCloudOrProduction ? { rejectUnauthorized: false } : undefined,
+  });
+
+  const adapter = new PrismaPg(pool);
   return new PrismaClient({
     adapter,
     log: env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],

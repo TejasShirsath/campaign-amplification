@@ -25,10 +25,22 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
     return;
   }
 
-  // Log unexpected errors (without exposing internals)
-  console.error('Unhandled error:', err.message);
-  if (process.env.NODE_ENV === 'development') {
-    console.error(err.stack);
+  // Log unexpected errors
+  console.error('Unhandled error:', err);
+
+  // Prisma-specific diagnostic messages
+  const prismaCode = (err as any).code;
+  if (prismaCode === 'P2021') {
+    sendError(res, 500, 'DATABASE_TABLE_NOT_FOUND', 'Database tables have not been created yet. Please run migrations.');
+    return;
+  }
+  if (prismaCode === 'P1001') {
+    sendError(res, 500, 'DATABASE_UNREACHABLE', 'Cannot reach database server. Please check connection string, pooling port, and SSL settings.');
+    return;
+  }
+  if (prismaCode === 'P1000') {
+    sendError(res, 500, 'DATABASE_AUTH_FAILED', 'Database authentication failed. Please verify database password and user in Vercel environment variables.');
+    return;
   }
 
   sendError(res, 500, 'INTERNAL_ERROR', 'An unexpected error occurred');

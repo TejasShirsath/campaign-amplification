@@ -22,12 +22,14 @@ router.get('/ready', async (_req: Request, res: Response) => {
       database: 'connected',
       timestamp: new Date().toISOString(),
     });
-  } catch {
+  } catch (err: any) {
+    console.error('Database ready check error:', err);
     res.status(503).json({
       success: false,
       error: {
         code: 'SERVICE_UNAVAILABLE',
         message: 'Database is not available',
+        details: err?.message,
       },
     });
   }
