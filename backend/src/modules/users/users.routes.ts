@@ -22,6 +22,15 @@ router.get(
   })
 );
 
+// GET /users/me/stats
+router.get(
+  '/me/stats',
+  asyncHandler(async (req: Request, res: Response) => {
+    const stats = await userService.getUserStats(req.userId!);
+    sendSuccess(res, stats);
+  })
+);
+
 // PATCH /users/me
 router.patch(
   '/me',

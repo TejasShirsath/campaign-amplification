@@ -10,9 +10,11 @@ import { Colors, Spacing, Typography } from '../../constants/theme';
 import { CampaignSummary, campaignsApi } from '../../api/campaigns';
 import { activityApi } from '../../api/activity';
 import { SkeletonCampaignCardLarge } from '../../components/common/skeleton';
+import { useAuth } from '../../context/auth-context';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { isAuthenticated, promptAuth } = useAuth();
   const [featured, setFeatured] = useState<CampaignSummary[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -55,6 +57,22 @@ export default function HomeScreen() {
   };
 
   const toggleSave = async (id: string) => {
+    if (!isAuthenticated) {
+      promptAuth({
+        title: 'Save Campaign',
+        reason: 'Sign in to save this campaign to your bookmarks and follow updates.',
+        onSuccess: async () => {
+          try {
+            await campaignsApi.saveCampaign(id);
+            setSavedIds((prev) => ({ ...prev, [id]: true }));
+          } catch {
+            // silent
+          }
+        },
+      });
+      return;
+    }
+
     const isCurrentlySaved = !!savedIds[id];
     setSavedIds((prev) => ({ ...prev, [id]: !isCurrentlySaved }));
     try {
@@ -67,6 +85,18 @@ export default function HomeScreen() {
       // rollback on error
       setSavedIds((prev) => ({ ...prev, [id]: isCurrentlySaved }));
     }
+  };
+
+  const handleStartCampaign = () => {
+    if (!isAuthenticated) {
+      promptAuth({
+        title: 'Create a Campaign',
+        reason: 'Sign in to create, edit, and publish campaigns on RippleUp.',
+        onSuccess: () => router.push('/create/1' as any),
+      });
+      return;
+    }
+    router.push('/create/1' as any);
   };
 
   const primaryFeatured = featured[0];
@@ -116,7 +146,7 @@ export default function HomeScreen() {
 
             <TouchableOpacity
               activeOpacity={0.85}
-              onPress={() => router.push('/create/1' as any)}
+              onPress={handleStartCampaign}
               style={styles.heroBtnSecondary}
             >
               <Text style={styles.heroBtnSecondaryText}>Start a campaign</Text>

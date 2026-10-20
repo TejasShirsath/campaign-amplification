@@ -5,26 +5,30 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Search, Heart, DollarSign, BellRing, Eye, CheckCheck } from 'lucide-react-native';
+import { BellRing, CheckCheck, LogIn, Bell } from 'lucide-react-native';
 import { ScreenContainer } from '../../components/common/screen-container';
 import { HeaderBar } from '../../components/common/header-bar';
+import { Button } from '../../components/common/button';
 import { SkeletonNotificationItem } from '../../components/common/skeleton';
 import { Colors, Radii, Spacing, Typography } from '../../constants/theme';
 import { NotificationItem, activityApi } from '../../api/activity';
-
-const TABS = ['All', 'Contributions', 'Updates', 'Saves'] as const;
+import { useAuth } from '../../context/auth-context';
 
 export default function ActivityScreen() {
   const router = useRouter();
-  const [selectedTab, setSelectedTab] = useState<typeof TABS[number]>('All');
+  const { isAuthenticated, promptAuth, isAuthenticating } = useAuth();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadNotifications = useCallback(async () => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const list = await activityApi.getNotifications(1, 30);
@@ -34,7 +38,7 @@ export default function ActivityScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     loadNotifications();
@@ -66,100 +70,50 @@ export default function ActivityScreen() {
     }
   };
 
-  // Static reference activities combined with real notification data
-  const defaultActivities = [
-    {
-      id: 'mock-1',
-      type: 'contribution',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
-      text: 'You contributed $50\nto Clean Rivers Brighter Futures',
-      time: '2 hours ago',
-      category: 'Contributions',
-    },
-    {
-      id: 'mock-2',
-      type: 'update',
-      avatarUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=100',
-      text: 'New update from\nDigital Skills for Rural Youth',
-      time: '5 hours ago',
-      category: 'Updates',
-    },
-    {
-      id: 'mock-3',
-      type: 'view',
-      icon: 'view',
-      text: 'Your campaign was viewed 128 times',
-      time: '3 days ago',
-      category: 'Updates',
-    },
-    {
-      id: 'mock-4',
-      type: 'save',
-      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100',
-      text: 'You saved a campaign\nMental Health Awareness',
-      time: '4 days ago',
-      category: 'Saves',
-    },
-  ];
+  // ─── GUEST STATE ─────────────────────────────────────────────────────────────
+  if (!isAuthenticated) {
+    return (
+      <ScreenContainer>
+        <HeaderBar title="Activity" />
+        <View style={styles.guestState}>
+          <View style={styles.guestIconCircle}>
+            <Bell size={36} color={Colors.primary} />
+          </View>
+          <Text style={styles.guestTitle}>Stay in the Loop</Text>
+          <Text style={styles.guestSubtitle}>
+            Sign in to receive updates when your campaigns are approved, funding milestones are achieved, or contributions are received.
+          </Text>
+          <Button
+            title="Sign In to View Activity"
+            icon={<LogIn size={18} color="#FFFFFF" />}
+            loading={isAuthenticating}
+            onPress={() =>
+              promptAuth({
+                title: 'Activity Notifications',
+                reason: 'Sign in to access your personalized updates and campaign milestones.',
+              })
+            }
+            style={{ width: '100%', maxWidth: 300, marginTop: Spacing.md }}
+          />
+        </View>
+      </ScreenContainer>
+    );
+  }
 
-  const filteredMock = defaultActivities.filter((item) => {
-    if (selectedTab === 'All') return true;
-    return item.category === selectedTab;
-  });
-
+  // ─── AUTHENTICATED STATE ─────────────────────────────────────────────────────
   return (
     <ScreenContainer refreshing={refreshing} onRefresh={onRefresh}>
-      <HeaderBar
-        title="Activity"
-        rightAction={
-          <TouchableOpacity activeOpacity={0.7} style={styles.iconBtn}>
-            <Search size={20} color={Colors.text} />
-          </TouchableOpacity>
-        }
-      />
+      <HeaderBar title="Activity" />
 
-      {/* Filter Tabs matching reference */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabScrollView}
-        contentContainerStyle={styles.tabScroll}
-      >
-        {TABS.map((tab) => {
-          const isSelected = selectedTab === tab;
-          return (
-            <TouchableOpacity
-              key={tab}
-              activeOpacity={0.8}
-              onPress={() => setSelectedTab(tab)}
-              style={[
-                styles.tabPill,
-                isSelected ? styles.tabPillActive : styles.tabPillInactive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.tabPillText,
-                  isSelected ? styles.tabPillTextActive : styles.tabPillTextInactive,
-                ]}
-              >
-                {tab}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      {/* Mark all as read button */}
+      {/* Header meta row */}
       <View style={styles.metaRow}>
-        <Text style={styles.recentLabel}>Recent</Text>
-        <TouchableOpacity
-          onPress={markAllRead}
-          style={styles.markAllBtn}
-        >
-          <CheckCheck size={14} color={Colors.primary} />
-          <Text style={styles.markAllText}>Mark all read</Text>
-        </TouchableOpacity>
+        <Text style={styles.recentLabel}>Notifications</Text>
+        {notifications.length > 0 && (
+          <TouchableOpacity onPress={markAllRead} style={styles.markAllBtn}>
+            <CheckCheck size={14} color={Colors.primary} />
+            <Text style={styles.markAllText}>Mark all read</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {loading && !refreshing ? (
@@ -168,109 +122,80 @@ export default function ActivityScreen() {
           <SkeletonNotificationItem />
           <SkeletonNotificationItem />
           <SkeletonNotificationItem />
-          <SkeletonNotificationItem />
+        </View>
+      ) : notifications.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyIconCircle}>
+            <BellRing size={32} color={Colors.textMuted} />
+          </View>
+          <Text style={styles.emptyTitle}>No activity yet</Text>
+          <Text style={styles.emptySubtitle}>
+            When campaigns you back or create achieve milestones, receive donations, or update distribution status, you'll see updates here.
+          </Text>
         </View>
       ) : (
-        <>
-          {/* Live backend notifications */}
-          {notifications.length > 0 && selectedTab === 'All' && (
-            <View style={styles.notifSection}>
-              {notifications.map((n) => (
-                <TouchableOpacity
-                  key={n.id}
-                  activeOpacity={0.8}
-                  onPress={() => markSingleRead(n.id)}
-                  style={[
-                    styles.activityRow,
-                    !n.isRead && styles.unreadActivityRow,
-                  ]}
-                >
-                  <View style={styles.iconCircle}>
-                    <BellRing size={18} color={Colors.primary} />
-                  </View>
-                  <View style={styles.activityBody}>
-                    <Text style={styles.activityTitle}>{n.title}</Text>
-                    <Text style={styles.activityMessage} numberOfLines={2}>
-                      {n.message}
-                    </Text>
-                    <Text style={styles.activityTime}>
-                      {new Date(n.createdAt).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </Text>
-                  </View>
-                  {!n.isRead && <View style={styles.unreadDot} />}
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          {/* Styled timeline list matching reference image */}
-          <View style={styles.activitiesList}>
-            {filteredMock.map((item) => (
-              <View key={item.id} style={styles.activityRow}>
-                {item.avatarUrl ? (
-                  <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
-                ) : (
-                  <View style={styles.iconCircle}>
-                    <Eye size={18} color={Colors.textMuted} />
-                  </View>
-                )}
-                <View style={styles.activityBody}>
-                  <Text style={styles.activityTitle}>{item.text}</Text>
-                  <Text style={styles.activityTime}>{item.time}</Text>
-                </View>
+        <View style={styles.notifSection}>
+          {notifications.map((n) => (
+            <TouchableOpacity
+              key={n.id}
+              activeOpacity={0.8}
+              onPress={() => markSingleRead(n.id)}
+              style={[styles.activityRow, !n.isRead && styles.unreadActivityRow]}
+            >
+              <View style={styles.iconCircle}>
+                <BellRing size={18} color={Colors.primary} />
               </View>
-            ))}
-          </View>
-        </>
+              <View style={styles.activityBody}>
+                <Text style={styles.activityTitle}>{n.title}</Text>
+                <Text style={styles.activityMessage} numberOfLines={2}>
+                  {n.message}
+                </Text>
+                <Text style={styles.activityTime}>
+                  {new Date(n.createdAt).toLocaleDateString([], {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </Text>
+              </View>
+              {!n.isRead && <View style={styles.unreadDot} />}
+            </TouchableOpacity>
+          ))}
+        </View>
       )}
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  iconBtn: {
-    padding: Spacing.xs,
-  },
-  tabScrollView: {
-    flexGrow: 0,
-    height: 44,
-    marginBottom: Spacing.sm,
-  },
-  tabScroll: {
-    flexDirection: 'row',
+  guestState: {
     alignItems: 'center',
-    gap: Spacing.xs + 4,
-    paddingVertical: 2,
+    paddingVertical: Spacing.xxl,
+    paddingHorizontal: Spacing.lg,
   },
-  tabPill: {
-    height: 36,
-    paddingHorizontal: 16,
+  guestIconCircle: {
+    width: 72,
+    height: 72,
     borderRadius: Radii.full,
-    borderWidth: 1,
+    backgroundColor: Colors.primaryBg,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: Spacing.lg,
   },
-  tabPillActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+  guestTitle: {
+    fontSize: Typography.sizes.hero,
+    fontWeight: Typography.weights.extrabold,
+    color: Colors.text,
+    textAlign: 'center',
   },
-  tabPillInactive: {
-    backgroundColor: Colors.surface,
-    borderColor: Colors.border,
-  },
-  tabPillText: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.medium,
-  },
-  tabPillTextActive: {
-    color: '#FFFFFF',
-    fontWeight: Typography.weights.semibold,
-  },
-  tabPillTextInactive: {
+  guestSubtitle: {
+    fontSize: Typography.sizes.base,
     color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginTop: Spacing.xs,
+    maxWidth: 320,
   },
   metaRow: {
     flexDirection: 'row',
@@ -298,9 +223,6 @@ const styles = StyleSheet.create({
   notifSection: {
     marginBottom: Spacing.sm,
   },
-  activitiesList: {
-    marginTop: Spacing.xs,
-  },
   activityRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -312,12 +234,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryBg,
     borderRadius: Radii.md,
     paddingHorizontal: Spacing.sm,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: Radii.full,
-    marginRight: Spacing.md,
   },
   iconCircle: {
     width: 44,
@@ -353,5 +269,32 @@ const styles = StyleSheet.create({
     borderRadius: Radii.full,
     backgroundColor: Colors.primary,
     marginLeft: Spacing.sm,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xxl,
+    paddingHorizontal: Spacing.lg,
+  },
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
+  emptyTitle: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text,
+  },
+  emptySubtitle: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    marginTop: Spacing.xs,
+    maxWidth: 300,
+    lineHeight: 20,
   },
 });

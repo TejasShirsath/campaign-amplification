@@ -53,4 +53,8 @@ export const userApi = {
       params: { page, limit },
     });
   },
+
+  getMyStats: async (): Promise<UserStats> => {
+    return apiRequest<UserStats>('/api/v1/users/me/stats');
+  },
 };

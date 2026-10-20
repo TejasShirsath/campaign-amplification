@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { authenticate } from '../../middleware/auth.js';
+import { authenticate, optionalAuth } from '../../middleware/auth.js';
 import { validate, uuidParamSchema } from '../../middleware/validate.js';
 import { asyncHandler } from '../../middleware/async-handler.js';
 import { prisma } from '../../lib/prisma.js';
@@ -9,12 +9,10 @@ import { ApiError } from '../../utils/api-error.js';
 
 const router = Router();
 
-// All saved campaign routes require authentication
-router.use(...authenticate);
-
-// POST /campaigns/:id/save - Save a campaign
+// POST /campaigns/:id/save - Save a campaign (requires auth)
 router.post(
   '/:id/save',
+  ...authenticate,
   validate({ params: uuidParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const campaignId = req.params.id as string;
@@ -40,9 +38,10 @@ router.post(
   })
 );
 
-// DELETE /campaigns/:id/save - Unsave a campaign
+// DELETE /campaigns/:id/save - Unsave a campaign (requires auth)
 router.delete(
   '/:id/save',
+  ...authenticate,
   validate({ params: uuidParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const campaignId = req.params.id as string;
@@ -56,15 +55,21 @@ router.delete(
   })
 );
 
-// GET /campaigns/:id/saved - Check if campaign is saved
+// GET /campaigns/:id/saved - Check if campaign is saved (safe for guests)
 router.get(
   '/:id/saved',
+  optionalAuth,
   validate({ params: uuidParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
+    if (!req.userId) {
+      sendSuccess(res, { isSaved: false });
+      return;
+    }
+
     const saved = await prisma.savedCampaign.findUnique({
       where: {
         userId_campaignId: {
-          userId: req.userId!,
+          userId: req.userId,
           campaignId: req.params.id as string,
         },
       },

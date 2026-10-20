@@ -135,6 +135,42 @@ export class UserService {
 
     return { saved, total };
   }
+
+  async getUserStats(userId: string) {
+    const [campaignsCount, contributionsCount, savedCount] = await Promise.all([
+      prisma.campaign.count({ where: { creatorId: userId } }),
+      prisma.contribution.count({ where: { userId } }),
+      prisma.savedCampaign.count({ where: { userId } }),
+    ]);
+
+    return {
+      campaignsCount,
+      contributionsCount,
+      savedCount,
+    };
+  }
+
+  async getOrCreateGuestUser(): Promise<string> {
+    const guestAuthSubject = 'guest|anonymous';
+    let user = await prisma.user.findUnique({
+      where: { authSubject: guestAuthSubject },
+      select: { id: true },
+    });
+
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          authSubject: guestAuthSubject,
+          email: 'guest@rippleup.dev',
+          name: 'Guest Contributor',
+          displayName: 'Anonymous Supporter',
+        },
+        select: { id: true },
+      });
+    }
+
+    return user.id;
+  }
 }
 
 export const userService = new UserService();

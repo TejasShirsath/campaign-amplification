@@ -39,9 +39,10 @@ router.get(
   })
 );
 
-// GET /campaigns/:id - Get campaign detail
+// GET /campaigns/:id - Get campaign detail (public, optional auth resolves userId if logged in)
 router.get(
   '/:id',
+  optionalAuth,
   validate({ params: uuidParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     // Try to get userId from optional auth

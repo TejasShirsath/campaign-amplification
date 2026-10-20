@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home, Compass, Plus, Bell, User } from 'lucide-react-native';
 import { Colors, Typography } from '../../constants/theme';
 import { activityApi } from '../../api/activity';
+import { useAuth } from '../../context/auth-context';
 
 const TABS_CONFIG = [
   {
@@ -39,6 +40,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const [unreadCount, setUnreadCount] = useState(0);
+  const { isAuthenticated, promptAuth } = useAuth();
 
   useEffect(() => {
     (async () => {
@@ -71,6 +73,14 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
 
         const handlePress = () => {
           if (isCreate) {
+            if (!isAuthenticated) {
+              promptAuth({
+                title: 'Create a Campaign',
+                reason: 'Sign in to create and publish campaigns on RippleUp.',
+                onSuccess: () => router.push('/create/1' as any),
+              });
+              return;
+            }
             router.push('/create/1' as any);
             return;
           }

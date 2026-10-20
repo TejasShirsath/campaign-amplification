@@ -6,6 +6,7 @@ import { ArrowLeft, Bell, Settings, Share2, Heart } from 'lucide-react-native';
 import { Colors, Radii, Spacing, Typography } from '../../constants/theme';
 import { useAuth } from '../../context/auth-context';
 import { RippleUpLogo } from './rippleup-logo';
+import { UserAvatar } from './user-avatar';
 
 export interface HeaderBarProps {
   title?: string;
@@ -105,13 +106,12 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             onPress={() => router.push('/(tabs)/profile')}
             style={styles.avatarButton}
           >
-            <Image
-              source={{
-                uri:
-                  user?.avatarUrl ||
-                  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
-              }}
-              style={styles.avatar}
+            <UserAvatar
+              avatarUrl={user?.avatarUrl}
+              displayName={user?.displayName}
+              name={user?.name}
+              email={user?.email}
+              size="sm"
             />
           </TouchableOpacity>
         )}

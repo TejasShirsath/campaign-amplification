@@ -17,6 +17,7 @@ import { SkeletonCampaignCardRow } from '../../components/common/skeleton';
 import { Colors, Radii, Spacing, Typography } from '../../constants/theme';
 import { CampaignSummary, campaignsApi } from '../../api/campaigns';
 import { activityApi } from '../../api/activity';
+import { useAuth } from '../../context/auth-context';
 
 const CATEGORIES = [
   { key: 'ALL', label: 'All' },
@@ -31,6 +32,7 @@ const CATEGORIES = [
 
 export default function ExploreScreen() {
   const router = useRouter();
+  const { isAuthenticated, promptAuth } = useAuth();
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -81,6 +83,22 @@ export default function ExploreScreen() {
   };
 
   const toggleSave = async (id: string) => {
+    if (!isAuthenticated) {
+      promptAuth({
+        title: 'Save Campaign',
+        reason: 'Sign in to save this campaign to your bookmarks and follow updates.',
+        onSuccess: async () => {
+          try {
+            await campaignsApi.saveCampaign(id);
+            setSavedMap((prev) => ({ ...prev, [id]: true }));
+          } catch {
+            // silent
+          }
+        },
+      });
+      return;
+    }
+
     const isSaved = !!savedMap[id];
     setSavedMap((prev) => ({ ...prev, [id]: !isSaved }));
     try {

@@ -19,6 +19,9 @@ import { SkeletonContribute } from '../../components/common/skeleton';
 import { Colors, Radii, Shadows, Spacing, Typography } from '../../constants/theme';
 import { CampaignDetail, campaignsApi } from '../../api/campaigns';
 import { contributionsApi } from '../../api/contributions';
+import { openRazorpayCheckout } from '../../services/razorpay';
+import { useAuth } from '../../context/auth-context';
+import { Config } from '../../constants/config';
 
 const PRESET_AMOUNTS = [10, 25, 50, 100, 250];
 
@@ -26,6 +29,7 @@ export default function ContributeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuth();
 
   const [campaign, setCampaign] = useState<CampaignDetail | null>(null);
   const [selectedAmount, setSelectedAmount] = useState<number>(25);
@@ -53,10 +57,14 @@ export default function ContributeScreen() {
   }, [id]);
 
   const activeAmount = isCustom ? parseInt(customInput.replace(/[^0-9]/g, '') || '0', 10) : selectedAmount;
+  const inrAmount = Config.CURRENCY.toINR(activeAmount);
+  const inrPaise = Config.CURRENCY.toPaiseINR(activeAmount);
 
   // 95% ad spend, 5% fee calculation
-  const adSpend = Math.round(activeAmount * 0.95);
-  const platformFee = Math.round(activeAmount * 0.05);
+  const adSpendUSD = Math.round(activeAmount * 0.95);
+  const platformFeeUSD = Math.round(activeAmount * 0.05);
+  const adSpendINR = Math.round(inrAmount * 0.95);
+  const platformFeeINR = Math.round(inrAmount * 0.05);
 
   // Amplification reach estimate (~250 people per dollar)
   const estReach = activeAmount * 250;
@@ -78,38 +86,51 @@ export default function ContributeScreen() {
 
     try {
       setSubmitting(true);
-      const amountPaise = activeAmount * 100;
 
-      let contributionId = `demo_contrib_${Date.now()}`;
-      try {
-        // 1. Create contribution order on backend
-        const orderRes = await contributionsApi.createOrder(id, amountPaise, false);
-        contributionId = orderRes.contributionId;
+      // 1. Create contribution order on backend with converted INR amount in paise (1 USD = ₹86 INR)
+      const orderRes = await contributionsApi.createOrder(id, inrPaise, false);
+      const contributionId = orderRes.contributionId;
 
-        // 2. Process payment (Backend demo mode handles instant verification)
-        await contributionsApi.verifyPayment({
-          razorpayOrderId: orderRes.orderId,
-          razorpayPaymentId: `pay_demo_${Date.now()}`,
-          razorpaySignature: 'simulated_signature_verified',
-        });
-      } catch (apiErr: any) {
-        console.warn('Backend payment order note:', apiErr?.message);
-        // If conflict or demo, proceed with demo confirmation
-      }
+      // 2. Open real Razorpay Test Mode checkout for the converted amount in INR
+      const paymentResult = await openRazorpayCheckout({
+        keyId: orderRes.keyId || Config.RAZORPAY.keyId,
+        orderId: orderRes.orderId,
+        amountPaise: orderRes.totalPaise,
+        currency: orderRes.currency || 'INR',
+        campaignTitle: `${orderRes.campaignTitle || campaign.title} ($${activeAmount} USD)`,
+        userName: user?.displayName || user?.name || undefined,
+        userEmail: user?.email || undefined,
+      });
 
-      // 3. Navigate to Success Confirmation screen
+      // 3. Verify Razorpay cryptographic signature on backend
+      await contributionsApi.verifyPayment({
+        razorpayOrderId: paymentResult.razorpayOrderId,
+        razorpayPaymentId: paymentResult.razorpayPaymentId,
+        razorpaySignature: paymentResult.razorpaySignature,
+      });
+
+      // 4. Navigate to Success Confirmation screen
       router.replace({
         pathname: '/campaign/success' as any,
         params: {
           contributionId,
           campaignId: id,
           amount: String(activeAmount),
+          amountINR: String(inrAmount),
           campaignTitle: campaign.title,
           coverImageUrl: campaign.coverImageUrl || '',
         },
       });
     } catch (err: any) {
       const msg = err.message || 'Unable to process payment at this time.';
+      if (
+        msg.includes('cancelled') ||
+        msg.includes('dismiss') ||
+        msg.includes('cancel')
+      ) {
+        setErrorMsg('Payment was cancelled. You have not been charged.');
+        return;
+      }
       setErrorMsg(msg);
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         window.alert(msg);
@@ -196,6 +217,7 @@ export default function ContributeScreen() {
         <View style={styles.presetGrid}>
           {PRESET_AMOUNTS.map((amt) => {
             const isSelected = !isCustom && selectedAmount === amt;
+            const inrEquivalent = Config.CURRENCY.toINR(amt);
             return (
               <TouchableOpacity
                 key={amt}
@@ -215,7 +237,15 @@ export default function ContributeScreen() {
                     isSelected && styles.presetTextSelected,
                   ]}
                 >
-                  ${amt.toLocaleString('en-US')}
+                  ${amt}
+                </Text>
+                <Text
+                  style={[
+                    styles.presetInrSubtext,
+                    isSelected && styles.presetInrSubtextSelected,
+                  ]}
+                >
+                  ₹{inrEquivalent.toLocaleString('en-IN')}
                 </Text>
               </TouchableOpacity>
             );
@@ -240,12 +270,20 @@ export default function ContributeScreen() {
             >
               Custom
             </Text>
+            <Text
+              style={[
+                styles.presetInrSubtext,
+                isCustom && styles.presetInrSubtextSelected,
+              ]}
+            >
+              Any $
+            </Text>
           </TouchableOpacity>
         </View>
 
         {isCustom && (
           <Input
-            placeholder="Enter custom amount in $"
+            placeholder="Enter custom amount in USD ($)"
             keyboardType="numeric"
             value={customInput}
             onChangeText={setCustomInput}
@@ -253,13 +291,25 @@ export default function ContributeScreen() {
           />
         )}
 
+        {/* Currency Conversion Card */}
+        <View style={styles.conversionCard}>
+          <View style={styles.conversionLeft}>
+            <Text style={styles.conversionTitle}>Currency Conversion</Text>
+            <Text style={styles.conversionRate}>Exchange rate: 1 USD ≈ ₹86.00 INR</Text>
+          </View>
+          <View style={styles.conversionRight}>
+            <Text style={styles.conversionTotalINR}>₹{inrAmount.toLocaleString('en-IN')}</Text>
+            <Text style={styles.conversionTotalUSD}>for ${activeAmount} USD</Text>
+          </View>
+        </View>
+
         {/* Fee Breakdown Text matching reference */}
         <View style={styles.breakdownBox}>
           <Text style={styles.breakdownText}>
-            95% goes to digital ad distribution (${adSpend.toLocaleString('en-US')})
+            95% goes to digital ad distribution: ${adSpendUSD} (≈ ₹{adSpendINR.toLocaleString('en-IN')})
           </Text>
           <Text style={styles.breakdownTextSub}>
-            5% verification & platform fee (${platformFee.toLocaleString('en-US')})
+            5% verification & platform fee: ${platformFeeUSD} (≈ ₹{platformFeeINR.toLocaleString('en-IN')})
           </Text>
         </View>
 
@@ -286,7 +336,7 @@ export default function ContributeScreen() {
           </View>
         )}
         <Button
-          title="Continue to Payment"
+          title={`Pay ₹${inrAmount.toLocaleString('en-IN')} ($${activeAmount} USD)`}
           showArrow
           loading={submitting}
           onPress={handlePayment}
@@ -381,13 +431,14 @@ const styles = StyleSheet.create({
   },
   presetBtn: {
     width: '31%',
-    height: 52,
+    height: 56,
     borderRadius: Radii.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 4,
   },
   presetBtnSelected: {
     backgroundColor: Colors.darkPrimary,
@@ -395,15 +446,61 @@ const styles = StyleSheet.create({
   },
   presetText: {
     fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.semibold,
+    fontWeight: Typography.weights.bold,
     color: Colors.text,
   },
   presetTextSelected: {
     color: '#FFFFFF',
+  },
+  presetInrSubtext: {
+    fontSize: 10,
+    fontWeight: Typography.weights.medium,
+    color: Colors.textMuted,
+    marginTop: 1,
+  },
+  presetInrSubtextSelected: {
+    color: 'rgba(255, 255, 255, 0.85)',
+  },
+  conversionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+    borderRadius: Radii.lg,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  conversionLeft: {
+    flex: 1,
+  },
+  conversionTitle: {
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
+    color: '#166534',
+  },
+  conversionRate: {
+    fontSize: 11,
+    color: '#15803D',
+    marginTop: 2,
+  },
+  conversionRight: {
+    alignItems: 'flex-end',
+  },
+  conversionTotalINR: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.extrabold,
+    color: '#166534',
+  },
+  conversionTotalUSD: {
+    fontSize: 11,
+    color: '#15803D',
+    marginTop: 1,
   },
   breakdownBox: {
-    marginVertical: Spacing.lg,
+    marginVertical: Spacing.md,
     paddingVertical: Spacing.xs,
   },
   breakdownText: {

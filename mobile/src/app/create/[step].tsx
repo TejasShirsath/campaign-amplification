@@ -38,6 +38,7 @@ import { Input, SelectDropdown } from '../../components/common/input';
 import { Button } from '../../components/common/button';
 import { Colors, Radii, Shadows, Spacing, Typography } from '../../constants/theme';
 import { useDraft } from '../../context/draft-context';
+import { useAuth } from '../../context/auth-context';
 import { ImageUploadDropzone } from '../../components/creation/image-upload-dropzone';
 import { resolveImageUrl } from '../../constants/config';
 
@@ -135,6 +136,7 @@ export default function CreateStepScreen() {
     saveDraftOnly,
     resetDraft,
   } = useDraft();
+  const { isAuthenticated, promptAuth } = useAuth();
 
   const [saving, setSaving] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -189,6 +191,17 @@ export default function CreateStepScreen() {
 
   // Manual "Save as Draft" action
   const handleSaveDraft = async () => {
+    if (!isAuthenticated) {
+      promptAuth({
+        title: 'Sign In to Save Draft',
+        reason: 'Sign in to save this campaign draft to your account.',
+        onSuccess: async () => {
+          await handleSaveDraft();
+        },
+      });
+      return;
+    }
+
     setErrorMsg(null);
     setSavingDraft(true);
     try {
@@ -208,6 +221,17 @@ export default function CreateStepScreen() {
 
   // Step advancement & validation
   const handleNext = async () => {
+    if (!isAuthenticated) {
+      promptAuth({
+        title: 'Sign In to Continue',
+        reason: 'Sign in to save and proceed with your campaign creation.',
+        onSuccess: async () => {
+          await handleNext();
+        },
+      });
+      return;
+    }
+
     setErrorMsg(null);
 
     // 1. Basics validation

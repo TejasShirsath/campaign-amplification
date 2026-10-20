@@ -1,52 +1,181 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { authenticate } from '../../middleware/auth.js';
+import { authenticate, optionalAuth } from '../../middleware/auth.js';
 import { validate, uuidParamSchema } from '../../middleware/validate.js';
 import { asyncHandler } from '../../middleware/async-handler.js';
 import { createContributionSchema, verifyPaymentSchema } from './contributions.schema.js';
 import { contributionService } from './contributions.service.js';
+import { userService } from '../users/users.service.js';
+import { prisma } from '../../lib/prisma.js';
 import { sendSuccess, sendCreated } from '../../utils/response.js';
 import { verifyWebhookSignature } from '../../lib/razorpay.js';
 import { ApiError } from '../../utils/api-error.js';
+import { env } from '../../config/env.js';
 
 const router = Router();
 
-// POST /campaigns/:id/contributions - Create a contribution
+// POST /campaigns/:id/contributions - Create a contribution (supports authenticated and guest contributions)
 router.post(
   '/campaigns/:id/contributions',
-  ...authenticate,
+  optionalAuth,
   validate({ params: uuidParamSchema, body: createContributionSchema }),
   asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.userId || (await userService.getOrCreateGuestUser());
     const result = await contributionService.createContribution(
       req.params.id as string,
-      req.userId!,
+      userId,
       req.body
     );
     sendCreated(res, result);
   })
 );
 
-// GET /contributions/:id - Get contribution detail
+// GET /contributions/:id - Get contribution detail (supports authenticated and guest contributors)
 router.get(
   '/contributions/:id',
-  ...authenticate,
+  optionalAuth,
   validate({ params: uuidParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const contribution = await contributionService.getContributionForUser(
-      req.params.id as string,
-      req.userId!
+    const contribution = await contributionService.getContributionDetail(
+      req.params.id as string
     );
     sendSuccess(res, contribution);
+  })
+);
+
+// GET /payments/razorpay/checkout/:orderId - Hosted Razorpay Checkout page for mobile webviews / web-browsers
+router.get(
+  '/payments/razorpay/checkout/:orderId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const orderId = req.params.orderId as string;
+    const attempt = await prisma.paymentAttempt.findUnique({
+      where: { razorpayOrderId: orderId },
+      include: {
+        contribution: {
+          include: {
+            campaign: { select: { title: true } },
+            user: { select: { displayName: true, name: true, email: true } },
+          },
+        },
+      },
+    });
+
+    if (!attempt) {
+      throw ApiError.notFound('Payment order');
+    }
+
+    const campaignTitle = attempt.contribution.campaign.title;
+    const customerName = attempt.contribution.user?.displayName || attempt.contribution.user?.name || '';
+    const customerEmail = attempt.contribution.user?.email || '';
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RippleUp - Razorpay Checkout</title>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background-color: #f8fafc; color: #1e293b; padding: 20px; }
+    .card { background: white; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01); padding: 32px 24px; max-width: 400px; width: 100%; text-align: center; border: 1px solid #e2e8f0; }
+    .brand { font-size: 24px; font-weight: 800; color: #249770; margin-bottom: 8px; }
+    .tagline { font-size: 13px; color: #64748b; margin-bottom: 24px; }
+    .spinner { border: 4px solid #f1f5f9; border-top: 4px solid #249770; border-radius: 50%; width: 44px; height: 44px; animation: spin 0.8s linear infinite; margin: 0 auto 20px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .desc { font-size: 14px; color: #64748b; margin-bottom: 24px; }
+    .btn { background: #249770; color: white; border: none; padding: 14px 20px; border-radius: 12px; font-size: 16px; font-weight: 700; width: 100%; cursor: pointer; transition: background 0.2s; }
+    .btn:hover { background: #1e7d5d; }
+    .btn-cancel { background: transparent; color: #94a3b8; border: none; padding: 10px; margin-top: 12px; font-size: 14px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">RippleUp</div>
+    <div class="tagline">Campaign Amplification Platform</div>
+    <div id="loader" class="spinner"></div>
+    <div class="title">Secure Razorpay Payment</div>
+    <div class="desc">${campaignTitle} (₹${(attempt.amountPaise / 100).toFixed(2)})</div>
+    <button id="payBtn" class="btn" onclick="openCheckout()">Proceed with Payment</button>
+    <button class="btn-cancel" onclick="cancelPayment()">Cancel</button>
+  </div>
+
+  <script>
+    var options = {
+      key: "${env.RAZORPAY_KEY_ID}",
+      amount: ${attempt.amountPaise},
+      currency: "${attempt.currency || 'INR'}",
+      name: "RippleUp",
+      description: "Contribution to " + ${JSON.stringify(campaignTitle)},
+      order_id: "${attempt.razorpayOrderId}",
+      prefill: {
+        name: ${JSON.stringify(customerName)},
+        email: ${JSON.stringify(customerEmail)}
+      },
+      theme: {
+        color: "#249770"
+      },
+      modal: {
+        ondismiss: function() {
+          cancelPayment();
+        }
+      },
+      handler: function(response) {
+        var returnUrl = "rippleup://campaign/success?razorpay_order_id=" + encodeURIComponent(response.razorpay_order_id) +
+          "&razorpay_payment_id=" + encodeURIComponent(response.razorpay_payment_id) +
+          "&razorpay_signature=" + encodeURIComponent(response.razorpay_signature) +
+          "&contributionId=${attempt.contributionId}";
+        window.location.href = returnUrl;
+      }
+    };
+
+    function openCheckout() {
+      try {
+        var rzp = new Razorpay(options);
+        rzp.open();
+      } catch (e) {
+        alert("Failed to initialize Razorpay: " + e.message);
+      }
+    }
+
+    function cancelPayment() {
+      window.location.href = "rippleup://campaign/cancel";
+    }
+
+    // Auto open on load
+    window.onload = function() {
+      setTimeout(openCheckout, 400);
+    };
+  </script>
+</body>
+</html>`;
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
   })
 );
 
 // POST /payments/razorpay/verify - Verify Razorpay payment
 router.post(
   '/payments/razorpay/verify',
-  ...authenticate,
+  optionalAuth,
   validate({ body: verifyPaymentSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const result = await contributionService.verifyPayment(req.userId!, req.body);
+    let effectiveUserId = req.userId;
+    if (!effectiveUserId) {
+      // For guest contributions, resolve userId from the payment attempt's contribution
+      const attempt = await prisma.paymentAttempt.findUnique({
+        where: { razorpayOrderId: req.body.razorpayOrderId },
+        select: { contribution: { select: { userId: true } } },
+      });
+      if (attempt?.contribution?.userId) {
+        effectiveUserId = attempt.contribution.userId;
+      } else {
+        effectiveUserId = await userService.getOrCreateGuestUser();
+      }
+    }
+    const result = await contributionService.verifyPayment(effectiveUserId, req.body);
     sendSuccess(res, result);
   })
 );

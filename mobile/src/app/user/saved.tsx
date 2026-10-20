@@ -1,37 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Bookmark, LogIn, Compass } from 'lucide-react-native';
 import { HeaderBar } from '../../components/common/header-bar';
+import { Button } from '../../components/common/button';
 import { CampaignCardRow } from '../../components/campaign/campaign-cards';
 import { SkeletonCampaignCardRow } from '../../components/common/skeleton';
-import { Colors, Spacing, Typography } from '../../constants/theme';
+import { Colors, Radii, Spacing, Typography } from '../../constants/theme';
 import { CampaignSummary, campaignsApi } from '../../api/campaigns';
 import { userApi } from '../../api/user';
+import { useAuth } from '../../context/auth-context';
 
 export default function SavedCampaignsScreen() {
   const router = useRouter();
+  const { isAuthenticated, promptAuth, isAuthenticating } = useAuth();
   const [saved, setSaved] = useState<CampaignSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const loadSavedCampaigns = useCallback(async () => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      const list = await userApi.getMySavedCampaigns();
+      setSaved(list);
+    } catch (err) {
+      console.warn('Failed to load saved campaigns:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const list = await userApi.getMySavedCampaigns();
-        if (list.length > 0) {
-          setSaved(list);
-        } else {
-          // Provide fallback from discovery
-          const fallback = await campaignsApi.discover({ limit: 4 });
-          setSaved(fallback.slice(0, 3));
-        }
-      } catch (err) {
-        console.warn('Failed to load saved campaigns:', err);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+    loadSavedCampaigns();
+  }, [loadSavedCampaigns]);
 
   const handleUnsave = async (id: string) => {
     setSaved((prev) => prev.filter((c) => c.id !== id));
@@ -42,6 +46,38 @@ export default function SavedCampaignsScreen() {
     }
   };
 
+  // ─── GUEST STATE ─────────────────────────────────────────────────────────────
+  if (!isAuthenticated) {
+    return (
+      <View style={styles.container}>
+        <HeaderBar title="Saved Campaigns" showBack style={styles.header} />
+        <View style={styles.guestContainer}>
+          <View style={styles.guestIconCircle}>
+            <Bookmark size={36} color={Colors.primary} />
+          </View>
+          <Text style={styles.guestTitle}>Saved Campaigns</Text>
+          <Text style={styles.guestSubtitle}>
+            Sign in to bookmark campaigns, track funding progress, and access them quickly across devices.
+          </Text>
+          <Button
+            title="Sign In with Auth0"
+            icon={<LogIn size={18} color="#FFFFFF" />}
+            loading={isAuthenticating}
+            onPress={() =>
+              promptAuth({
+                title: 'Saved Campaigns',
+                reason: 'Sign in to access and manage your bookmarked campaigns.',
+                onSuccess: () => loadSavedCampaigns(),
+              })
+            }
+            style={{ width: '100%', maxWidth: 300, marginTop: Spacing.md }}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  // ─── AUTHENTICATED STATE ─────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
       <HeaderBar title="Saved Campaigns" showBack style={styles.header} />
@@ -55,7 +91,20 @@ export default function SavedCampaignsScreen() {
           </>
         ) : saved.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No saved campaigns yet</Text>
+            <View style={styles.emptyIconCircle}>
+              <Bookmark size={32} color={Colors.textMuted} />
+            </View>
+            <Text style={styles.emptyTitle}>No saved campaigns yet</Text>
+            <Text style={styles.emptySubtitle}>
+              When browsing, tap the bookmark icon on any campaign to save it here for quick access.
+            </Text>
+            <Button
+              title="Explore Campaigns"
+              variant="outline"
+              icon={<Compass size={18} color={Colors.primary} />}
+              onPress={() => router.push('/(tabs)/explore' as any)}
+              style={{ marginTop: Spacing.lg }}
+            />
           </View>
         ) : (
           saved.map((camp) => (
@@ -83,17 +132,64 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.borderLight,
   },
+  guestContainer: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xxl,
+    paddingHorizontal: Spacing.lg,
+  },
+  guestIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.primaryBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
+  },
+  guestTitle: {
+    fontSize: Typography.sizes.hero,
+    fontWeight: Typography.weights.extrabold,
+    color: Colors.text,
+    textAlign: 'center',
+  },
+  guestSubtitle: {
+    fontSize: Typography.sizes.base,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginTop: Spacing.xs,
+    maxWidth: 320,
+  },
   scrollContent: {
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     paddingBottom: Spacing.xxxl,
   },
   emptyContainer: {
-    padding: Spacing.xxl,
     alignItems: 'center',
+    paddingVertical: Spacing.xxl,
+    paddingHorizontal: Spacing.lg,
   },
-  emptyText: {
-    fontSize: Typography.sizes.base,
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
+  emptyTitle: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text,
+  },
+  emptySubtitle: {
+    fontSize: Typography.sizes.sm,
     color: Colors.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
+    maxWidth: 280,
+    lineHeight: 18,
   },
 });

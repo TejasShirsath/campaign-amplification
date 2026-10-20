@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Config } from '../constants/config';
+import { auth0Service } from '../services/auth0';
 
 const TOKEN_KEY = '@rippleup_token';
 
-let memoryToken: string | null = Config.DEMO_USERS.CREATOR.token;
+let memoryToken: string | null = null;
 
 export async function setAuthToken(token: string | null) {
   memoryToken = token;
@@ -15,6 +16,18 @@ export async function setAuthToken(token: string | null) {
 }
 
 export async function getAuthToken(): Promise<string | null> {
+  // 1. Try real Auth0 active/refreshed access token
+  try {
+    const auth0Token = await auth0Service.getValidAccessToken();
+    if (auth0Token) {
+      memoryToken = auth0Token;
+      return auth0Token;
+    }
+  } catch {
+    // continue
+  }
+
+  // 2. Fallback to memory or custom/demo token if explicitly set
   if (memoryToken) return memoryToken;
   try {
     const stored = await AsyncStorage.getItem(TOKEN_KEY);
@@ -25,9 +38,8 @@ export async function getAuthToken(): Promise<string | null> {
   } catch {
     // fallback
   }
-  // Default to demo creator token if none set
-  memoryToken = Config.DEMO_USERS.CREATOR.token;
-  return memoryToken;
+
+  return null;
 }
 
 export interface ApiResponse<T = any> {
@@ -134,7 +146,21 @@ export async function apiRequest<T = any>(
       console.log(`[API Request] ${method} ${url}`);
     }
 
-    const response = await fetch(url, fetchOptions);
+    let response = await fetch(url, fetchOptions);
+
+    // If 401 Unauthorized on protected endpoint, try to refresh Auth0 access token once
+    if (response.status === 401 && requiresAuth) {
+      try {
+        const refreshedToken = await auth0Service.refreshAccessToken();
+        if (refreshedToken) {
+          reqHeaders['Authorization'] = `Bearer ${refreshedToken}`;
+          fetchOptions.headers = reqHeaders;
+          response = await fetch(url, fetchOptions);
+        }
+      } catch {
+        // continue to error processing
+      }
+    }
 
     if (response.status === 204) {
       return {} as T;

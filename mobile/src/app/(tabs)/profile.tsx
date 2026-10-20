@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Image,
   TouchableOpacity,
   Modal,
   Alert,
+  ScrollView,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,13 +17,18 @@ import {
   Bookmark,
   Receipt,
   ChevronRight,
-  UserCheck,
   Sparkles,
   X,
+  LogIn,
+  UserPlus,
+  LogOut,
+  ShieldCheck,
+  TrendingUp,
 } from 'lucide-react-native';
 import { ScreenContainer } from '../../components/common/screen-container';
 import { HeaderBar } from '../../components/common/header-bar';
 import { RippleUpLogo } from '../../components/common/rippleup-logo';
+import { UserAvatar } from '../../components/common/user-avatar';
 import { ONBOARDING_STORAGE_KEY } from '../../components/common/onboarding-slides';
 import { Button } from '../../components/common/button';
 import { Input } from '../../components/common/input';
@@ -33,38 +39,43 @@ import { userApi } from '../../api/user';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, isLoading, currentRole, switchDemoUser, refreshProfile } = useAuth();
+  const { user, isAuthenticated, isLoading, isAuthenticating, signIn, signUp, logout, refreshProfile } = useAuth();
 
-  const [campaignsCount, setCampaignsCount] = useState(3);
-  const [contributionsCount, setContributionsCount] = useState(12);
-  const [savedCount, setSavedCount] = useState(5);
+  const [stats, setStats] = useState({
+    campaignsCount: 0,
+    contributionsCount: 0,
+    savedCount: 0,
+  });
+  const [statsLoading, setStatsLoading] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [displayName, setDisplayName] = useState(user?.displayName || '');
-  const [bio, setBio] = useState(user?.bio || '');
+  const [displayName, setDisplayName] = useState('');
+  const [bio, setBio] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
 
+  const fetchStats = useCallback(async () => {
+    if (!isAuthenticated) return;
+    try {
+      setStatsLoading(true);
+      const data = await userApi.getMyStats();
+      setStats({
+        campaignsCount: data.campaignsCount ?? 0,
+        contributionsCount: data.contributionsCount ?? 0,
+        savedCount: data.savedCount ?? 0,
+      });
+    } catch (err) {
+      console.warn('Failed to fetch user stats:', err);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [isAuthenticated]);
+
   useEffect(() => {
-    (async () => {
-      try {
-        const [camps, conts, saved] = await Promise.allSettled([
-          userApi.getMyCampaigns(1, 1),
-          userApi.getMyContributions(1, 1),
-          userApi.getMySavedCampaigns(1, 1),
-        ]);
-        if (camps.status === 'fulfilled' && camps.value) {
-          setCampaignsCount(camps.value.length ? 3 : 0);
-        }
-        if (conts.status === 'fulfilled' && conts.value) {
-          setContributionsCount(conts.value.length ? 12 : 0);
-        }
-        if (saved.status === 'fulfilled' && saved.value) {
-          setSavedCount(saved.value.length ? 5 : 0);
-        }
-      } catch {
-        // fallback to reference values
-      }
-    })();
-  }, []);
+    if (isAuthenticated) {
+      fetchStats();
+      setDisplayName(user?.displayName || user?.name || '');
+      setBio(user?.bio || '');
+    }
+  }, [isAuthenticated, user, fetchStats]);
 
   const handleSaveProfile = async () => {
     try {
@@ -80,7 +91,34 @@ export default function ProfileScreen() {
     }
   };
 
-  if (isLoading && !user) {
+  const handleLogout = async () => {
+    const executeLogout = async () => {
+      try {
+        setEditModalVisible(false);
+        await logout();
+      } catch (err) {
+        console.warn('Logout execution failed:', err);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Are you sure you want to log out of RippleUp?');
+      if (confirmed) {
+        await executeLogout();
+      }
+    } else {
+      Alert.alert('Log Out', 'Are you sure you want to log out of RippleUp?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log Out',
+          style: 'destructive',
+          onPress: executeLogout,
+        },
+      ]);
+    }
+  };
+
+  if (isLoading) {
     return (
       <ScreenContainer>
         <HeaderBar title="Profile" />
@@ -89,33 +127,119 @@ export default function ProfileScreen() {
     );
   }
 
+  // ─── GUEST STATE ─────────────────────────────────────────────────────────────
+  if (!isAuthenticated || !user) {
+    return (
+      <ScreenContainer>
+        <HeaderBar title="Profile" />
+
+        <View style={styles.guestContainer}>
+          <UserAvatar size="xl" style={styles.guestAvatar} />
+
+          <Text style={styles.guestTitle}>Welcome to RippleUp</Text>
+          <Text style={styles.guestSubtitle}>
+            Sign in or create an account to launch campaigns, bookmark causes, and track your contribution history.
+          </Text>
+
+          <View style={styles.guestActionButtons}>
+            <Button
+              title="Sign In with Auth0"
+              icon={<LogIn size={18} color="#FFFFFF" />}
+              loading={isAuthenticating}
+              onPress={() => signIn()}
+              style={{ width: '100%' }}
+            />
+            <Button
+              title="Create an Account"
+              variant="outline"
+              icon={<UserPlus size={18} color={Colors.primary} />}
+              loading={isAuthenticating}
+              onPress={() => signUp()}
+              style={{ width: '100%' }}
+            />
+          </View>
+
+          {/* Benefits Cards */}
+          <View style={styles.benefitsCard}>
+            <Text style={styles.benefitsHeading}>Why Join RippleUp?</Text>
+
+            <View style={styles.benefitItem}>
+              <View style={styles.benefitIcon}>
+                <Sparkles size={18} color={Colors.primary} />
+              </View>
+              <View style={styles.benefitTextGroup}>
+                <Text style={styles.benefitTitle}>Create Campaigns</Text>
+                <Text style={styles.benefitDesc}>
+                  Amplify verified civic, health, and environmental messages through targeted digital distribution.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.benefitItem}>
+              <View style={styles.benefitIcon}>
+                <Bookmark size={18} color={Colors.primary} />
+              </View>
+              <View style={styles.benefitTextGroup}>
+                <Text style={styles.benefitTitle}>Save Causes</Text>
+                <Text style={styles.benefitDesc}>
+                  Keep track of impactful initiatives and receive real-time updates as milestones are reached.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.benefitItem}>
+              <View style={styles.benefitIcon}>
+                <Receipt size={18} color={Colors.primary} />
+              </View>
+              <View style={styles.benefitTextGroup}>
+                <Text style={styles.benefitTitle}>Contribution History</Text>
+                <Text style={styles.benefitDesc}>
+                  Review your contributions, access distribution reports, and inspect exact programmatic ad spend.
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* RippleUp Brand Footer */}
+          <View style={styles.brandFooter}>
+            <RippleUpLogo size="sm" style={{ marginBottom: Spacing.xs }} />
+            <Text style={styles.brandFooterTagline}>Small contributions. Wider impact.</Text>
+            <Text style={styles.brandFooterVersion}>v1.0.0 • Community-driven & Transparent</Text>
+          </View>
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  // ─── AUTHENTICATED STATE ─────────────────────────────────────────────────────
   return (
     <ScreenContainer>
-      {/* Header matching reference */}
       <HeaderBar
         title="Profile"
         showSettings
         onSettingsPress={() => setEditModalVisible(true)}
       />
 
-      {/* User Info Section matching reference */}
+      {/* User Info Section */}
       <View style={styles.profileSection}>
-        <Image
-          source={{
-            uri:
-              user?.avatarUrl ||
-              'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
-          }}
+        <UserAvatar
+          avatarUrl={user.avatarUrl}
+          displayName={user.displayName}
+          name={user.name}
+          email={user.email}
+          size="xl"
           style={styles.avatar}
         />
-        <Text style={styles.userName}>{user?.displayName || user?.name || 'Tejas'}</Text>
-        <Text style={styles.userEmail}>{user?.email || 'tejas@example.com'}</Text>
+        <Text style={styles.userName}>{user.displayName || user.name || 'RippleUp User'}</Text>
+        <Text style={styles.userEmail}>{user.email || ''}</Text>
+
+        {user.bio ? <Text style={styles.userBio}>{user.bio}</Text> : null}
 
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => {
-            setDisplayName(user?.displayName || '');
-            setBio(user?.bio || '');
+            setDisplayName(user.displayName || user.name || '');
+            setBio(user.bio || '');
             setEditModalVisible(true);
           }}
           style={styles.editProfileBtn}
@@ -124,14 +248,14 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 3 Stat Counters Row matching reference */}
+      {/* 3 Stat Counters Row - Fully Dynamic from Backend */}
       <View style={styles.statsCard}>
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={() => router.push('/user/campaigns' as any)}
           style={styles.statColumn}
         >
-          <Text style={styles.statValue}>{campaignsCount}</Text>
+          <Text style={styles.statValue}>{stats.campaignsCount}</Text>
           <Text style={styles.statLabel}>Campaigns</Text>
         </TouchableOpacity>
 
@@ -142,7 +266,7 @@ export default function ProfileScreen() {
           onPress={() => router.push('/user/contributions' as any)}
           style={styles.statColumn}
         >
-          <Text style={styles.statValue}>{contributionsCount}</Text>
+          <Text style={styles.statValue}>{stats.contributionsCount}</Text>
           <Text style={styles.statLabel}>Contributions</Text>
         </TouchableOpacity>
 
@@ -153,12 +277,12 @@ export default function ProfileScreen() {
           onPress={() => router.push('/user/saved' as any)}
           style={styles.statColumn}
         >
-          <Text style={styles.statValue}>{savedCount}</Text>
+          <Text style={styles.statValue}>{stats.savedCount}</Text>
           <Text style={styles.statLabel}>Saved</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Navigation Menu List matching reference */}
+      {/* Navigation Menu List */}
       <View style={styles.menuList}>
         <TouchableOpacity
           activeOpacity={0.7}
@@ -218,6 +342,20 @@ export default function ProfileScreen() {
 
         <TouchableOpacity
           activeOpacity={0.7}
+          onPress={() => setEditModalVisible(true)}
+          style={styles.menuItem}
+        >
+          <View style={styles.menuLeft}>
+            <View style={styles.menuIconContainer}>
+              <ShieldCheck size={20} color={Colors.text} />
+            </View>
+            <Text style={styles.menuTitle}>Account Settings</Text>
+          </View>
+          <ChevronRight size={18} color={Colors.textLight} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          activeOpacity={0.7}
           onPress={async () => {
             try {
               await AsyncStorage.removeItem(ONBOARDING_STORAGE_KEY);
@@ -239,43 +377,33 @@ export default function ProfileScreen() {
           </View>
           <ChevronRight size={18} color={Colors.textLight} />
         </TouchableOpacity>
+
+        {/* Log Out inside the Menu list / Settings */}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={handleLogout}
+          style={[styles.menuItem, { borderBottomWidth: 0 }]}
+        >
+          <View style={styles.menuLeft}>
+            <View style={styles.menuIconContainer}>
+              <LogOut size={20} color="#DC2626" />
+            </View>
+            <Text style={[styles.menuTitle, { color: '#DC2626', fontWeight: Typography.weights.semibold }]}>
+              Log Out
+            </Text>
+          </View>
+          <ChevronRight size={18} color="#DC2626" />
+        </TouchableOpacity>
       </View>
 
-      {/* Role / Demo Account Switcher */}
-      <View style={styles.roleCard}>
-        <View style={styles.roleHeader}>
-          <UserCheck size={18} color={Colors.primary} />
-          <Text style={styles.roleTitle}>Account Role: {currentRole.toUpperCase()}</Text>
-        </View>
-        <Text style={styles.roleSub}>
-          Switch test accounts between Campaign Creator and Community Backer to test both journeys seamlessly:
-        </Text>
-        <View style={styles.roleButtonsRow}>
-          <Button
-            title="Demo Creator"
-            size="sm"
-            variant={currentRole === 'creator' ? 'primary' : 'outline'}
-            onPress={() => switchDemoUser('creator')}
-            style={{ flex: 1 }}
-          />
-          <Button
-            title="Demo Backer"
-            size="sm"
-            variant={currentRole === 'backer' ? 'primary' : 'outline'}
-            onPress={() => switchDemoUser('backer')}
-            style={{ flex: 1 }}
-          />
-        </View>
-      </View>
-
-      {/* RippleUp Brand Footer */}
+      {/* Brand Footer */}
       <View style={styles.brandFooter}>
         <RippleUpLogo size="sm" style={{ marginBottom: Spacing.xs }} />
         <Text style={styles.brandFooterTagline}>Small contributions. Wider impact.</Text>
-        <Text style={styles.brandFooterVersion}>v1.0.0 • Community-driven & Transparent</Text>
+        <Text style={styles.brandFooterVersion}>v1.0.0 • Verified Account</Text>
       </View>
 
-      {/* Edit Profile Modal */}
+      {/* Settings & Edit Profile Modal */}
       <Modal
         visible={editModalVisible}
         transparent
@@ -285,7 +413,7 @@ export default function ProfileScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalHeading}>Edit Profile</Text>
+              <Text style={styles.modalHeading}>Settings & Profile</Text>
               <TouchableOpacity onPress={() => setEditModalVisible(false)}>
                 <X size={20} color={Colors.text} />
               </TouchableOpacity>
@@ -307,11 +435,21 @@ export default function ProfileScreen() {
             />
 
             <Button
-              title="Save Profile"
+              title="Save Changes"
               loading={savingProfile}
               onPress={handleSaveProfile}
-              style={{ marginTop: Spacing.md }}
+              style={{ marginTop: Spacing.sm }}
             />
+
+            {/* Logout button inside Settings Box */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={handleLogout}
+              style={styles.settingsLogoutBtn}
+            >
+              <LogOut size={18} color="#DC2626" />
+              <Text style={styles.settingsLogoutText}>Log Out of RippleUp</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -320,16 +458,83 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  guestContainer: {
+    alignItems: 'center',
+    paddingVertical: Spacing.lg,
+  },
+  guestAvatar: {
+    marginBottom: Spacing.md,
+  },
+  guestTitle: {
+    fontSize: Typography.sizes.hero,
+    fontWeight: Typography.weights.extrabold,
+    color: Colors.text,
+    textAlign: 'center',
+  },
+  guestSubtitle: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.lg,
+    maxWidth: 320,
+  },
+  guestActionButtons: {
+    width: '100%',
+    gap: Spacing.sm,
+    marginBottom: Spacing.xl,
+  },
+  benefitsCard: {
+    width: '100%',
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radii.xl,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+    ...Shadows.card,
+  },
+  benefitsHeading: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text,
+    marginBottom: Spacing.md,
+  },
+  benefitItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: Spacing.md,
+  },
+  benefitIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: Radii.md,
+    backgroundColor: Colors.primaryBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.md,
+    marginTop: 2,
+  },
+  benefitTextGroup: {
+    flex: 1,
+  },
+  benefitTitle: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.bold,
+    color: Colors.text,
+  },
+  benefitDesc: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
+    lineHeight: 18,
+    marginTop: 2,
+  },
   profileSection: {
     alignItems: 'center',
     paddingVertical: Spacing.md,
   },
   avatar: {
-    width: 84,
-    height: 84,
-    borderRadius: Radii.full,
-    borderWidth: 2,
-    borderColor: Colors.border,
     marginBottom: Spacing.sm,
   },
   userName: {
@@ -341,9 +546,17 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.sm,
     color: Colors.textMuted,
     marginTop: 2,
-    marginBottom: Spacing.md,
+  },
+  userBio: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginTop: Spacing.xs,
+    paddingHorizontal: Spacing.lg,
+    lineHeight: 18,
   },
   editProfileBtn: {
+    marginTop: Spacing.md,
     paddingVertical: 6,
     paddingHorizontal: 20,
     borderRadius: Radii.full,
@@ -420,34 +633,22 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weights.medium,
     color: Colors.text,
   },
-  roleCard: {
-    backgroundColor: Colors.primaryBg,
-    borderRadius: Radii.xl,
-    borderWidth: 1,
-    borderColor: Colors.primaryBorder,
-    padding: Spacing.md,
-    marginBottom: Spacing.xxl,
-  },
-  roleHeader: {
+  settingsLogoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: Spacing.md,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    borderRadius: Radii.lg,
+    marginTop: Spacing.lg,
   },
-  roleTitle: {
+  settingsLogoutText: {
     fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.bold,
-    color: Colors.primaryDark,
-  },
-  roleSub: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.primaryDark,
-    lineHeight: 18,
-    marginBottom: Spacing.sm,
-  },
-  roleButtonsRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
+    color: '#DC2626',
   },
   modalOverlay: {
     flex: 1,
@@ -475,12 +676,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: Spacing.xl,
     marginTop: Spacing.sm,
-  },
-  brandFooterName: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.bold,
-    color: Colors.text,
-    letterSpacing: -0.3,
   },
   brandFooterTagline: {
     fontSize: Typography.sizes.xs,

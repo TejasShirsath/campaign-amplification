@@ -7,12 +7,54 @@ import { Button } from '../../components/common/button';
 import { HeaderBar } from '../../components/common/header-bar';
 import { Colors, Radii, Spacing, Typography } from '../../constants/theme';
 import { useDraft } from '../../context/draft-context';
+import { useAuth } from '../../context/auth-context';
 
 export default function CreateLauncherScreen() {
   const router = useRouter();
   const { draft, resetDraft } = useDraft();
+  const { isAuthenticated, promptAuth } = useAuth();
 
   const hasExistingDraft = !!draft.basics.title || !!draft.campaignId;
+
+  const handleStartCampaign = () => {
+    if (!isAuthenticated) {
+      promptAuth({
+        title: 'Create a Campaign',
+        reason: 'Sign in to create, edit, and publish campaigns on RippleUp.',
+        onSuccess: () => router.push('/create/1' as any),
+      });
+      return;
+    }
+    router.push('/create/1' as any);
+  };
+
+  const handleResumeDraft = () => {
+    if (!isAuthenticated) {
+      promptAuth({
+        title: 'Resume Campaign Draft',
+        reason: 'Sign in to resume editing your saved campaign draft.',
+        onSuccess: () => router.push(`/create/${draft.currentStep}` as any),
+      });
+      return;
+    }
+    router.push(`/create/${draft.currentStep}` as any);
+  };
+
+  const handleStartNew = async () => {
+    if (!isAuthenticated) {
+      promptAuth({
+        title: 'Create a Campaign',
+        reason: 'Sign in to create, edit, and publish campaigns on RippleUp.',
+        onSuccess: async () => {
+          await resetDraft();
+          router.push('/create/1' as any);
+        },
+      });
+      return;
+    }
+    await resetDraft();
+    router.push('/create/1' as any);
+  };
 
   return (
     <ScreenContainer>
@@ -40,16 +82,13 @@ export default function CreateLauncherScreen() {
               <Button
                 title="Resume Draft"
                 showArrow
-                onPress={() => router.push(`/create/${draft.currentStep}` as any)}
+                onPress={handleResumeDraft}
                 style={{ flex: 1 }}
               />
               <Button
                 title="Start New"
                 variant="outline"
-                onPress={async () => {
-                  await resetDraft();
-                  router.push('/create/1' as any);
-                }}
+                onPress={handleStartNew}
               />
             </View>
           </View>
@@ -57,7 +96,7 @@ export default function CreateLauncherScreen() {
           <Button
             title="Start New Campaign"
             showArrow
-            onPress={() => router.push('/create/1' as any)}
+            onPress={handleStartCampaign}
             style={{ width: '100%', marginTop: Spacing.lg }}
           />
         )}

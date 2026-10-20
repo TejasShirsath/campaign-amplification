@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { MoreHorizontal, Plus } from 'lucide-react-native';
+import { MoreHorizontal, Plus, Layers, LogIn } from 'lucide-react-native';
 import { HeaderBar } from '../../components/common/header-bar';
 import { Button } from '../../components/common/button';
 import { SkeletonCampaignCardRow } from '../../components/common/skeleton';
@@ -16,17 +16,23 @@ import { Colors, Radii, Shadows, Spacing, Typography } from '../../constants/the
 import { CampaignSummary } from '../../api/campaigns';
 import { userApi } from '../../api/user';
 import { useDraft } from '../../context/draft-context';
+import { useAuth } from '../../context/auth-context';
 
 const TABS = ['Drafts', 'Active', 'Completed'] as const;
 
 export default function MyCampaignsScreen() {
   const router = useRouter();
   const { loadDraftFromBackend } = useDraft();
+  const { isAuthenticated, promptAuth, isAuthenticating } = useAuth();
   const [selectedTab, setSelectedTab] = useState<typeof TABS[number]>('Drafts');
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchUserCampaigns = useCallback(async () => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const list = await userApi.getMyCampaigns();
@@ -36,72 +42,59 @@ export default function MyCampaignsScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     fetchUserCampaigns();
   }, [fetchUserCampaigns]);
 
-  // Fallback demo campaigns matching the exact reference image
-  const referenceDrafts: CampaignSummary[] = [
-    {
-      id: 'draft-1',
-      title: 'Urban Green Spaces for Healthier Cities',
-      category: 'ENVIRONMENT',
-      creatorName: 'Demo Creator',
-      summary: 'Expanding tree canopy and pocket parks across high-density metro areas.',
-      coverImageUrl: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=400',
-      status: 'DRAFT',
-      fundingGoalPaise: 5000000,
-      totalRaisedPaise: 0,
-      contributorCount: 0,
-      estimatedReach: 60000,
-      isFeatured: false,
-      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: 'draft-2',
-      title: 'Sustainable Transport for Cleaner Air',
-      category: 'COMMUNITY',
-      creatorName: 'Demo Creator',
-      summary: 'Promoting electric cycle infrastructure and pedestrian safety zones.',
-      coverImageUrl: 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=400',
-      status: 'DRAFT',
-      fundingGoalPaise: 3500000,
-      totalRaisedPaise: 0,
-      contributorCount: 0,
-      estimatedReach: 45000,
-      isFeatured: false,
-      createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-  ];
-
   const filteredCampaigns = campaigns.filter((c) => {
     if (selectedTab === 'Drafts') return c.status === 'DRAFT';
-    if (selectedTab === 'Active') return ['SUBMITTED', 'APPROVED', 'FUNDING'].includes(c.status);
+    if (selectedTab === 'Active')
+      return ['SUBMITTED', 'APPROVED', 'FUNDING', 'DISTRIBUTION_PREP', 'PROMOTING'].includes(c.status);
     if (selectedTab === 'Completed') return ['FUNDED', 'COMPLETED'].includes(c.status);
     return true;
   });
 
-  const displayList =
-    filteredCampaigns.length > 0
-      ? filteredCampaigns
-      : selectedTab === 'Drafts'
-      ? referenceDrafts
-      : [];
-
   const handleResumeDraft = async (camp: CampaignSummary) => {
-    if (camp.id.startsWith('draft-')) {
-      router.push('/create/1' as any);
-    } else {
-      await loadDraftFromBackend(camp.id);
-      router.push('/create/1' as any);
-    }
+    await loadDraftFromBackend(camp.id);
+    router.push('/create/1' as any);
   };
 
+  // ─── GUEST STATE ─────────────────────────────────────────────────────────────
+  if (!isAuthenticated) {
+    return (
+      <View style={styles.container}>
+        <HeaderBar title="My Campaigns" showBack style={styles.header} />
+        <View style={styles.guestContainer}>
+          <View style={styles.guestIconCircle}>
+            <Layers size={36} color={Colors.primary} />
+          </View>
+          <Text style={styles.guestTitle}>Manage Your Campaigns</Text>
+          <Text style={styles.guestSubtitle}>
+            Sign in to access your drafts, monitor live campaign progress, and inspect distribution reach.
+          </Text>
+          <Button
+            title="Sign In with Auth0"
+            icon={<LogIn size={18} color="#FFFFFF" />}
+            loading={isAuthenticating}
+            onPress={() =>
+              promptAuth({
+                title: 'My Campaigns',
+                reason: 'Sign in to access your campaign drafts and active initiatives.',
+                onSuccess: () => fetchUserCampaigns(),
+              })
+            }
+            style={{ width: '100%', maxWidth: 300, marginTop: Spacing.md }}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  // ─── AUTHENTICATED STATE ─────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
-      {/* Header matching reference */}
       <HeaderBar
         title="My Campaigns"
         showBack
@@ -116,7 +109,7 @@ export default function MyCampaignsScreen() {
         style={styles.header}
       />
 
-      {/* Segmented Filter Tabs matching reference */}
+      {/* Segmented Filter Tabs */}
       <View style={styles.tabContainer}>
         {TABS.map((tab) => {
           const isSelected = selectedTab === tab;
@@ -150,9 +143,16 @@ export default function MyCampaignsScreen() {
             <SkeletonCampaignCardRow />
             <SkeletonCampaignCardRow />
           </>
-        ) : displayList.length === 0 ? (
+        ) : filteredCampaigns.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No {selectedTab.toLowerCase()} campaigns</Text>
+            <Text style={styles.emptySubtitle}>
+              {selectedTab === 'Drafts'
+                ? "You don't have any saved drafts. Start a new campaign to draft your message."
+                : selectedTab === 'Active'
+                ? 'No active campaigns currently in review or funding.'
+                : 'Completed campaigns and final reports will appear here.'}
+            </Text>
             <Button
               title="Start a Campaign"
               size="sm"
@@ -161,26 +161,25 @@ export default function MyCampaignsScreen() {
             />
           </View>
         ) : (
-          displayList.map((item) => (
+          filteredCampaigns.map((item) => (
             <View key={item.id} style={styles.campaignRow}>
-              <Image
-                source={{
-                  uri:
-                    item.coverImageUrl ||
-                    'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=400',
-                }}
-                style={styles.thumbnail}
-              />
+              {item.coverImageUrl ? (
+                <Image source={{ uri: item.coverImageUrl }} style={styles.thumbnail} />
+              ) : (
+                <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
+                  <Layers size={24} color={Colors.textMuted} />
+                </View>
+              )}
               <View style={styles.itemDetails}>
                 <Text numberOfLines={2} style={styles.itemTitle}>
-                  {item.title}
+                  {item.title || 'Untitled Campaign'}
                 </Text>
                 <Text style={styles.itemMeta}>
                   {selectedTab === 'Drafts'
-                    ? 'Draft · Last edited 2 days ago'
+                    ? 'Draft · In progress'
                     : selectedTab === 'Active'
-                    ? 'Active · Funding in progress'
-                    : 'Completed · Target reached'}
+                    ? `${item.status} · Funding in progress`
+                    : 'Completed'}
                 </Text>
 
                 <View style={styles.actionRow}>
@@ -190,18 +189,21 @@ export default function MyCampaignsScreen() {
                       onPress={() => handleResumeDraft(item)}
                       style={styles.continueBtn}
                     >
-                      <Text style={styles.continueBtnText}>Continue</Text>
+                      <Text style={styles.continueBtnText}>Continue Draft</Text>
                     </TouchableOpacity>
                   ) : (
                     <TouchableOpacity
                       activeOpacity={0.8}
-                      onPress={() => router.push(`/campaign/report?id=${item.id}` as any)}
+                      onPress={() => router.push(`/campaign/${item.id}` as any)}
                       style={styles.continueBtn}
                     >
-                      <Text style={styles.continueBtnText}>View Report</Text>
+                      <Text style={styles.continueBtnText}>View Campaign</Text>
                     </TouchableOpacity>
                   )}
-                  <TouchableOpacity style={styles.moreBtn}>
+                  <TouchableOpacity
+                    style={styles.moreBtn}
+                    onPress={() => router.push(`/campaign/${item.id}` as any)}
+                  >
                     <MoreHorizontal size={18} color={Colors.textMuted} />
                   </TouchableOpacity>
                 </View>
@@ -223,6 +225,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: Colors.borderLight,
+  },
+  guestContainer: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xxl,
+    paddingHorizontal: Spacing.lg,
+  },
+  guestIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: Radii.full,
+    backgroundColor: Colors.primaryBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
+  },
+  guestTitle: {
+    fontSize: Typography.sizes.hero,
+    fontWeight: Typography.weights.extrabold,
+    color: Colors.text,
+    textAlign: 'center',
+  },
+  guestSubtitle: {
+    fontSize: Typography.sizes.base,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginTop: Spacing.xs,
+    maxWidth: 320,
   },
   newBtn: {
     padding: Spacing.xs,
@@ -280,6 +310,10 @@ const styles = StyleSheet.create({
     borderRadius: Radii.lg,
     backgroundColor: Colors.surfaceAlt,
   },
+  thumbnailPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   itemDetails: {
     flex: 1,
     marginLeft: Spacing.md,
@@ -326,6 +360,14 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: Typography.sizes.base,
     fontWeight: Typography.weights.semibold,
+    color: Colors.text,
+  },
+  emptySubtitle: {
+    fontSize: Typography.sizes.xs,
     color: Colors.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
+    maxWidth: 280,
+    lineHeight: 18,
   },
 });

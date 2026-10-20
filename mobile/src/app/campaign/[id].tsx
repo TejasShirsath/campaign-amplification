@@ -28,11 +28,13 @@ import {
   FeedbackSummary,
   campaignsApi,
 } from '../../api/campaigns';
+import { useAuth } from '../../context/auth-context';
 
 export default function CampaignDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { isAuthenticated, promptAuth } = useAuth();
 
   const [campaign, setCampaign] = useState<CampaignDetail | null>(null);
   const [progress, setProgress] = useState<CampaignProgress | null>(null);
@@ -79,6 +81,22 @@ export default function CampaignDetailScreen() {
 
   const toggleSave = async () => {
     if (!id) return;
+    if (!isAuthenticated) {
+      promptAuth({
+        title: 'Save Campaign',
+        reason: 'Sign in to save this campaign to your bookmarks and follow updates.',
+        onSuccess: async () => {
+          try {
+            await campaignsApi.saveCampaign(id);
+            setIsSaved(true);
+          } catch {
+            // silent
+          }
+        },
+      });
+      return;
+    }
+
     const nextState = !isSaved;
     setIsSaved(nextState);
     try {

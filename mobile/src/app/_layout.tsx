@@ -76,6 +76,7 @@ export default function RootLayout() {
             }}
           >
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="auth" options={{ headerShown: false }} />
             <Stack.Screen name="campaign/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="campaign/contribute" options={{ headerShown: false }} />
             <Stack.Screen name="campaign/success" options={{ headerShown: false }} />
