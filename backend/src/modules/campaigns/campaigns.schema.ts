@@ -84,6 +84,8 @@ export const campaignReachSchema = z.object({
   audienceInterests: z.array(z.string()).optional().nullable(),
   distributionChannels: z.array(z.string()).optional().nullable(),
   campaignDuration: z.number().int().min(1).max(365).optional().nullable(),
+  budgetAllocation: z.string().optional().nullable(),
+  budgetSplit: z.any().optional().nullable(),
 });
 
 // ─── Step 5: Submit ─────────────────────────────────────────────────────────────
@@ -92,8 +94,8 @@ export const campaignSubmitSchema = z.object({
   fundingGoalPaise: z
     .number()
     .int()
-    .min(10000, 'Minimum funding goal is ₹100 (10000 paise)')
-    .max(100000000, 'Maximum funding goal is ₹10,00,000'),
+    .min(1000, 'Minimum funding goal is $10')
+    .max(100000000, 'Maximum funding goal is $1,000,000'),
   estimatedReach: z.number().int().min(0).optional().nullable(),
   agreedToTerms: z.boolean().refine((val) => val === true, {
     message: 'You must agree to the campaign terms',
@@ -122,6 +124,8 @@ export const updateCampaignSchema = z.object({
   audienceInterests: z.array(z.string()).optional().nullable(),
   distributionChannels: z.array(z.string()).optional().nullable(),
   campaignDuration: z.number().int().min(1).max(365).optional().nullable(),
+  budgetAllocation: z.string().optional().nullable(),
+  budgetSplit: z.any().optional().nullable(),
 
   // Submit
   fundingGoalPaise: z.number().int().min(10000).max(100000000).optional(),

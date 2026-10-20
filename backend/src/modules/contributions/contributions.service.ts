@@ -29,13 +29,13 @@ export class ContributionService {
 
     if (!campaign) throw ApiError.notFound('Campaign');
 
-    // Only campaigns in FUNDING status can receive contributions
-    if (campaign.status !== 'FUNDING') {
+    // Only campaigns in FUNDING status can receive contributions (unless demo payment mode is active)
+    if (campaign.status !== 'FUNDING' && !env.DEMO_PAYMENT_MODE) {
       throw ApiError.conflict('This campaign is not currently accepting contributions');
     }
 
     // Check if funding deadline has passed
-    if (campaign.fundingEndsAt && campaign.fundingEndsAt < new Date()) {
+    if (campaign.fundingEndsAt && campaign.fundingEndsAt < new Date() && !env.DEMO_PAYMENT_MODE) {
       throw ApiError.conflict('The funding period for this campaign has ended');
     }
 

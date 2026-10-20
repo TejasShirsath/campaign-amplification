@@ -261,6 +261,25 @@ export class CampaignService {
 
     const completedSteps = this.addCompletedStep(campaign.completedSteps as string[] | null, 'reach');
 
+    if (data.budgetSplit || data.budgetAllocation) {
+      await prisma.campaignTargeting.upsert({
+        where: { campaignId: id },
+        create: {
+          campaignId: id,
+          locations: (data.targetLocations as any) ?? undefined,
+          interests: (data.audienceInterests as any) ?? undefined,
+          platforms: (data.distributionChannels as any) ?? undefined,
+          budgetSplit: (data.budgetSplit ?? { allocation: data.budgetAllocation }) as any,
+        },
+        update: {
+          locations: (data.targetLocations as any) ?? undefined,
+          interests: (data.audienceInterests as any) ?? undefined,
+          platforms: (data.distributionChannels as any) ?? undefined,
+          budgetSplit: (data.budgetSplit ?? { allocation: data.budgetAllocation }) as any,
+        },
+      });
+    }
+
     return prisma.campaign.update({
       where: { id },
       data: {
