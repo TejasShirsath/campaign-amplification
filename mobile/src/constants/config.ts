@@ -10,12 +10,15 @@ const DEFAULT_API_HOST = Platform.select({
 });
 
 function getApiBaseUrl(): string {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL.split('#')[0].trim();
+  }
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
       return 'http://localhost:5000/api/v1';
     }
   }
-  return process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_HOST;
+  return DEFAULT_API_HOST;
 }
 
 export function resolveImageUrl(url?: string | null): string {
@@ -39,6 +42,9 @@ export function resolveImageUrl(url?: string | null): string {
 
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      if (!configuredApi.includes('localhost') && !configuredApi.includes('127.0.0.1')) {
+        return url;
+      }
       return url.replace(/http:\/\/(?:\d{1,3}\.){3}\d{1,3}:5000/, 'http://localhost:5000');
     }
   } else {
