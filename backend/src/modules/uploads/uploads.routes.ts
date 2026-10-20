@@ -3,15 +3,23 @@ import type { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { optionalAuth } from '../../middleware/auth.js';
 import { sendSuccess, sendError } from '../../utils/response.js';
 
 const router = Router();
 
-// Ensure upload directory exists
-const uploadDir = path.resolve(process.cwd(), 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+// Ensure upload directory exists - use /tmp on Vercel / serverless environments (read-only filesystem)
+export const uploadDir = process.env.VERCEL
+  ? path.join(os.tmpdir(), 'uploads')
+  : path.resolve(process.cwd(), 'uploads');
+
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+} catch (err) {
+  console.warn('⚠️ Unable to create upload directory:', err);
 }
 
 // Multer storage configuration

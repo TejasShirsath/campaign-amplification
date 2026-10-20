@@ -16,7 +16,7 @@ import savedCampaignRoutes from './modules/saved-campaigns/saved-campaigns.route
 import feedbackRoutes from './modules/feedback/feedback.routes.js';
 import activityRoutes from './modules/activity/activity.routes.js';
 import reportRoutes from './modules/reports/reports.routes.js';
-import uploadRoutes from './modules/uploads/uploads.routes.js';
+import uploadRoutes, { uploadDir } from './modules/uploads/uploads.routes.js';
 
 export function createApp() {
   const app = express();
@@ -106,7 +106,7 @@ export function createApp() {
       res.setHeader('Access-Control-Allow-Private-Network', 'true');
       next();
     },
-    express.static(path.resolve(process.cwd(), 'uploads'))
+    express.static(uploadDir)
   );
 
   // ─── Routes ─────────────────────────────────────────────────────────────────
