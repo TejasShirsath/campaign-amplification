@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HeaderBar } from '../../components/common/header-bar';
 import { Badge } from '../../components/common/badge';
 import { ProgressBar } from '../../components/common/progress-bar';
@@ -15,6 +16,7 @@ import { resolveImageUrl } from '../../constants/config';
 
 export default function CampaignPreviewScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { draft } = useDraft();
   const [preview, setPreview] = useState<CampaignDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -46,13 +48,13 @@ export default function CampaignPreviewScreen() {
   const reach = preview?.estimatedReach || draft.submit.estimatedReach;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <HeaderBar title="Campaign Preview" showBack />
 
       {loading ? (
         <SkeletonPreview />
       ) : (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 16) + 80 }]}>
           <View style={styles.previewNotice}>
             <Text style={styles.previewNoticeText}>
               Draft Preview — This is how your campaign will appear to backers.
@@ -90,7 +92,7 @@ export default function CampaignPreviewScreen() {
         </ScrollView>
       )}
 
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <Button
           title="Back to Editor"
           variant="outline"

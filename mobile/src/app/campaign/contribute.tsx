@@ -9,6 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ShieldCheck, Info, Megaphone } from 'lucide-react-native';
 import { HeaderBar } from '../../components/common/header-bar';
 import { CampaignCardMini } from '../../components/campaign/campaign-cards';
@@ -23,6 +24,7 @@ const PRESET_AMOUNTS = [10, 25, 50, 100, 250];
 
 export default function ContributeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [campaign, setCampaign] = useState<CampaignDetail | null>(null);
@@ -121,7 +123,7 @@ export default function ContributeScreen() {
 
   if (loading || !campaign) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
         <HeaderBar
           title="Contribute"
           subtitle="Secure payment via Razorpay"
@@ -136,7 +138,7 @@ export default function ContributeScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header matching reference */}
       <HeaderBar
         title="Contribute"
@@ -149,7 +151,10 @@ export default function ContributeScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, 16) + 90 },
+        ]}
       >
         {/* Campaign Mini Summary Card matching reference */}
         <CampaignCardMini
@@ -274,7 +279,7 @@ export default function ContributeScreen() {
       </ScrollView>
 
       {/* Fixed Bottom CTA matching reference */}
-      <View style={styles.fixedBottomBar}>
+      <View style={[styles.fixedBottomBar, { paddingBottom: Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : Spacing.md) }]}>
         {errorMsg && (
           <View style={styles.errorBox}>
             <Text style={styles.errorText}>{errorMsg}</Text>

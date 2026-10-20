@@ -12,6 +12,7 @@ import {
   Image as RNImage,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Eye,
   Users,
@@ -116,6 +117,7 @@ const FUNDING_PRESETS = [500, 1000, 2500, 5000];
 
 export default function CreateStepScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { step } = useLocalSearchParams<{ step: string }>();
   const stepNumber = Math.max(1, Math.min(5, parseInt(step || '1', 10)));
 
@@ -297,7 +299,7 @@ export default function CreateStepScreen() {
   // ─── Post-Submission Confirmation Screen with Campaign Status Timeline ───
   if (isSubmitted) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, Spacing.md) }]}>
         <HeaderBar title="Submission Complete" showBack={false} />
         <ScrollView contentContainerStyle={styles.confirmationScroll}>
           <View style={styles.successBadgeCircle}>
@@ -440,7 +442,7 @@ export default function CreateStepScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.container}
     >
-      <View style={styles.headerWrapper}>
+      <View style={[styles.headerWrapper, { paddingTop: insets.top }]}>
         <HeaderBar
           title="Create Campaign"
           showBack
@@ -503,7 +505,10 @@ export default function CreateStepScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, 16) + 90 },
+        ]}
       >
         {/* ─── STEP 1: BASICS ─── */}
         {stepNumber === 1 && (
@@ -1205,7 +1210,7 @@ export default function CreateStepScreen() {
       </ScrollView>
 
       {/* Fixed Bottom Action Bar */}
-      <View style={styles.fixedBottomBar}>
+      <View style={[styles.fixedBottomBar, { paddingBottom: Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : Spacing.md) }]}>
         {errorMsg && (
           <View style={[styles.errorBox, { marginBottom: Spacing.sm, marginTop: 0 }]}>
             <Text style={styles.errorText}>{errorMsg}</Text>

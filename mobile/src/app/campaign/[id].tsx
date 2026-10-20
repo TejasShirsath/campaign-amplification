@@ -9,6 +9,7 @@ import {
   Share,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Users, Megaphone, FileText, ExternalLink, ThumbsUp } from 'lucide-react-native';
 import { FloatingHeroBar } from '../../components/common/header-bar';
 import { SkeletonCampaignDetail } from '../../components/common/skeleton';
@@ -30,6 +31,7 @@ import {
 
 export default function CampaignDetailScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [campaign, setCampaign] = useState<CampaignDetail | null>(null);
@@ -147,7 +149,10 @@ export default function CampaignDetailScreen() {
         onShare={handleShare}
       />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 16) + 90 }]}
+      >
         {/* Top Hero Image */}
         <Image
           source={{
@@ -369,7 +374,7 @@ export default function CampaignDetailScreen() {
       </ScrollView>
 
       {/* Fixed Bottom CTA Bar matching reference */}
-      <View style={styles.fixedBottomBar}>
+      <View style={[styles.fixedBottomBar, { paddingBottom: Math.max(insets.bottom, Spacing.md) }]}>
         <Button
           title="Contribute Now"
           onPress={() => router.push(`/campaign/contribute?id=${campaign.id}` as any)}

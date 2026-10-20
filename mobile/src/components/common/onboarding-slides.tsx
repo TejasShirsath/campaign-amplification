@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   FlatList,
   useWindowDimensions,
+  Animated,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -43,14 +45,27 @@ export function OnboardingSlides({ onComplete }: OnboardingSlidesProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const isFinishing = useRef(false);
 
   const handleFinish = async () => {
+    if (isFinishing.current) return;
+    isFinishing.current = true;
+
     try {
       await AsyncStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
     } catch {
       // ignore
     }
-    onComplete();
+
+    // Smooth fade out transition to app
+    Animated.timing(fadeAnim, {
+      toValue: 0,
+      duration: 400,
+      useNativeDriver: Platform.OS !== 'web',
+    }).start(() => {
+      onComplete();
+    });
   };
 
   const handleNext = () => {
@@ -72,7 +87,7 @@ export function OnboardingSlides({ onComplete }: OnboardingSlidesProps) {
   };
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <FlatList
         ref={flatListRef}
         data={SLIDES}
@@ -82,6 +97,9 @@ export function OnboardingSlides({ onComplete }: OnboardingSlidesProps) {
         showsHorizontalScrollIndicator={false}
         bounces={false}
         onMomentumScrollEnd={handleScrollEnd}
+        decelerationRate="fast"
+        snapToInterval={windowWidth}
+        snapToAlignment="start"
         getItemLayout={(_, index) => ({
           length: windowWidth,
           offset: windowWidth * index,
@@ -92,7 +110,8 @@ export function OnboardingSlides({ onComplete }: OnboardingSlidesProps) {
             <Image
               source={item.image}
               style={styles.fullscreenImage}
-              contentFit="cover"
+              contentFit="contain"
+              contentPosition="top"
               priority="high"
             />
           </View>
@@ -153,7 +172,7 @@ export function OnboardingSlides({ onComplete }: OnboardingSlidesProps) {
           <ArrowRight size={24} color="#FFFFFF" strokeWidth={2.8} />
         </TouchableOpacity>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 

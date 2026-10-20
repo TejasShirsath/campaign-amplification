@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Bell, Settings, Share2, Heart } from 'lucide-react-native';
 import { Colors, Radii, Spacing, Typography } from '../../constants/theme';
 import { useAuth } from '../../context/auth-context';
@@ -126,9 +127,10 @@ export const FloatingHeroBar: React.FC<{
   onShare?: () => void;
 }> = ({ onBack, isSaved, onToggleSave, onShare }) => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   return (
-    <View style={styles.floatingBar}>
+    <View style={[styles.floatingBar, { top: Math.max(insets.top + 8, 20) }]}>
       <TouchableOpacity
         activeOpacity={0.8}
         onPress={

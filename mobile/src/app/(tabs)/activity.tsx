@@ -122,6 +122,7 @@ export default function ActivityScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.tabScrollView}
         contentContainerStyle={styles.tabScroll}
       >
         {TABS.map((tab) => {
@@ -233,16 +234,24 @@ const styles = StyleSheet.create({
   iconBtn: {
     padding: Spacing.xs,
   },
-  tabScroll: {
-    paddingVertical: Spacing.sm,
-    gap: Spacing.xs + 4,
+  tabScrollView: {
+    flexGrow: 0,
+    height: 44,
     marginBottom: Spacing.sm,
   },
+  tabScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs + 4,
+    paddingVertical: 2,
+  },
   tabPill: {
-    paddingVertical: 7,
+    height: 36,
     paddingHorizontal: 16,
     borderRadius: Radii.full,
     borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabPillActive: {
     backgroundColor: Colors.primary,
