@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Search, SlidersHorizontal } from 'lucide-react-native';
+import { Search } from 'lucide-react-native';
 import { ScreenContainer } from '../../components/common/screen-container';
 import { HeaderBar } from '../../components/common/header-bar';
 import { CampaignCardRow } from '../../components/campaign/campaign-cards';
@@ -106,7 +106,7 @@ export default function ExploreScreen() {
         style={styles.header}
       />
 
-      {/* Search Input Bar with Filter Button matching reference */}
+      {/* Search Input Bar */}
       <View style={styles.searchBarRow}>
         <View style={styles.searchInputContainer}>
           <Search size={18} color={Colors.textLight} style={styles.searchIcon} />
@@ -120,15 +120,13 @@ export default function ExploreScreen() {
             returnKeyType="search"
           />
         </View>
-        <TouchableOpacity activeOpacity={0.7} style={styles.filterButton}>
-          <SlidersHorizontal size={18} color={Colors.text} />
-        </TouchableOpacity>
       </View>
 
       {/* Horizontal Category Filter Pills matching reference */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.categoryScrollView}
         contentContainerStyle={styles.categoryScroll}
       >
         {CATEGORIES.map((cat) => {
@@ -234,16 +232,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  categoryScrollView: {
+    flexGrow: 0,
+    height: 44,
+    marginVertical: Spacing.xs,
+  },
   categoryScroll: {
-    paddingVertical: Spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.xs + 4,
-    marginBottom: Spacing.md,
+    paddingVertical: 2,
   },
   categoryPill: {
-    paddingVertical: 7,
+    height: 36,
     paddingHorizontal: 16,
     borderRadius: Radii.full,
     borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
   },
   categoryPillActive: {
     backgroundColor: Colors.primary,
@@ -256,6 +263,7 @@ const styles = StyleSheet.create({
   categoryPillText: {
     fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.medium,
+    lineHeight: 18,
   },
   categoryPillTextActive: {
     color: '#FFFFFF',

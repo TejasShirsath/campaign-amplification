@@ -8,7 +8,7 @@ import {
   CampaignVisualsInput,
   creationApi,
 } from '../api/creation';
-import { CampaignDetail, campaignsApi } from '../api/campaigns';
+import { CampaignDetail, CreativeItem, campaignsApi } from '../api/campaigns';
 
 const DRAFT_STORAGE_KEY = '@rippleup_local_draft';
 
@@ -61,8 +61,8 @@ const initialDraftState: DraftState = {
     campaignDuration: 30,
   },
   submit: {
-    fundingGoalPaise: 5000000, // ₹50,000
-    estimatedReach: 65000,
+    fundingGoalPaise: 100000, // $1,000 (100,000 cents)
+    estimatedReach: 100000,
     agreedToTerms: false,
   },
   isSaving: false,
@@ -77,7 +77,9 @@ interface DraftContextType {
   updateSubmit: (data: Partial<CampaignSubmitInput>) => void;
   updateCoverImage: (url: string) => void;
   updateAdImage: (url: string) => void;
+  updateAdCreative: (fields: Partial<import('../api/campaigns').CreativeItem>) => void;
   saveCurrentStep: (stepNumber: number) => Promise<boolean>;
+  saveDraftOnly: (stepNumber?: number) => Promise<boolean>;
   loadDraftFromBackend: (campaignId: string) => Promise<void>;
   resetDraft: () => Promise<void>;
 }
@@ -91,7 +93,9 @@ const DraftContext = createContext<DraftContextType>({
   updateSubmit: () => {},
   updateCoverImage: () => {},
   updateAdImage: () => {},
+  updateAdCreative: () => {},
   saveCurrentStep: async () => false,
+  saveDraftOnly: async () => false,
   loadDraftFromBackend: async () => {},
   resetDraft: async () => {},
 });
@@ -214,22 +218,24 @@ export const DraftProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   };
 
-  const updateAdImage = (url: string) => {
+  const updateAdCreative = (fields: Partial<CreativeItem>) => {
     setDraft((prev) => {
       const updatedCreatives = [...(prev.visuals?.creatives || [])];
-      if (url) {
-        updatedCreatives[1] = {
-          type: 'ad_image',
-          url,
-          headline: updatedCreatives[0]?.headline || prev.basics.title,
-          callToAction: 'Support Amplification',
-          sortOrder: 1,
-        };
-      } else {
-        if (updatedCreatives.length > 1) {
-          updatedCreatives.splice(1, 1);
-        }
-      }
+      const existingAd = updatedCreatives[1] || {
+        type: 'ad_image',
+        url: '',
+        headline: prev.basics.title || '',
+        description: '',
+        callToAction: 'Support Amplification',
+        sortOrder: 1,
+      };
+
+      updatedCreatives[1] = {
+        ...existingAd,
+        ...fields,
+        type: 'ad_image',
+        sortOrder: 1,
+      };
 
       const updated: DraftState = {
         ...prev,
@@ -243,36 +249,153 @@ export const DraftProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   };
 
+  const updateAdImage = (url: string) => {
+    updateAdCreative({ url });
+  };
+
+  const saveDraftOnly = async (_stepNumber?: number): Promise<boolean> => {
+    setDraft((prev) => ({ ...prev, isSaving: true }));
+    try {
+      const currentDraft = draftRef.current;
+      let currentCampaignId = currentDraft.campaignId;
+      const titleToUse = currentDraft.basics.title?.trim() || 'Untitled Draft';
+      const categoryToUse = currentDraft.basics.category || 'ENVIRONMENT';
+      const creatorNameToUse = currentDraft.basics.creatorName || 'Campaign Creator';
+      const coverUrl =
+        currentDraft.basics.coverImageUrl?.trim() ||
+        currentDraft.visuals.creatives[0]?.url?.trim() ||
+        '';
+
+      if (!currentCampaignId) {
+        const createRes = await creationApi.createDraft({
+          title: titleToUse,
+          category: categoryToUse,
+          creatorName: creatorNameToUse,
+          summary: currentDraft.basics.summary || '',
+          coverImageUrl: coverUrl,
+        });
+        currentCampaignId = createRes.id;
+      } else {
+        await creationApi.updateBasics(currentCampaignId, {
+          ...currentDraft.basics,
+          title: titleToUse,
+          category: categoryToUse,
+          creatorName: creatorNameToUse,
+          coverImageUrl: coverUrl,
+        });
+      }
+
+      // Sync step 2 story
+      if (currentDraft.story.introText?.trim() || currentDraft.story.sources?.length) {
+        const cleanSources = (currentDraft.story.sources || []).filter(
+          (s) => s && (s.title?.trim() || s.url?.trim())
+        );
+        await creationApi.updateStory(currentCampaignId, {
+          headline: titleToUse,
+          introText: currentDraft.story.introText?.trim() || '',
+          storyContent: [
+            { id: '1', type: 'text', content: currentDraft.story.introText?.trim() || '' },
+          ],
+          sources: cleanSources,
+        });
+      }
+
+      // Sync step 3 visuals
+      const creatives: any[] = [];
+      if (coverUrl) {
+        creatives.push({
+          type: 'cover',
+          url: coverUrl,
+          headline: titleToUse,
+          callToAction: 'Support Amplification',
+          sortOrder: 0,
+        });
+      }
+      const adCreative = currentDraft.visuals.creatives[1];
+      if (adCreative?.url?.trim()) {
+        creatives.push({
+          type: 'ad_image',
+          url: adCreative.url.trim(),
+          headline: adCreative.headline?.trim() || titleToUse,
+          description: adCreative.description?.trim() || null,
+          callToAction: adCreative.callToAction?.trim() || 'Support Amplification',
+          sortOrder: 1,
+        });
+      }
+      if (creatives.length > 0) {
+        await creationApi.updateVisuals(currentCampaignId, { creatives });
+      }
+
+      // Sync step 4 reach
+      await creationApi.updateReach(currentCampaignId, {
+        targetLocations: currentDraft.reach.targetLocations?.length
+          ? currentDraft.reach.targetLocations
+          : ['All India'],
+        audienceInterests: currentDraft.reach.audienceInterests || [],
+        distributionChannels: currentDraft.reach.distributionChannels?.length
+          ? currentDraft.reach.distributionChannels
+          : ['Meta (Instagram & Facebook)', 'Google & YouTube Ads'],
+        campaignDuration: currentDraft.reach.campaignDuration || 30,
+        budgetAllocation: currentDraft.reach.budgetAllocation || 'Balanced (50% Social / 50% Search & Feeds)',
+      });
+
+      setDraft((prev) => {
+        const updated: DraftState = {
+          ...prev,
+          campaignId: currentCampaignId,
+          isSaving: false,
+          lastSavedAt: new Date().toISOString(),
+        };
+        AsyncStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+        draftRef.current = updated;
+        return updated;
+      });
+      return true;
+    } catch (err: any) {
+      console.warn('Error saving draft only:', err);
+      setDraft((prev) => ({ ...prev, isSaving: false }));
+      return false;
+    }
+  };
+
   const saveCurrentStep = async (stepNumber: number): Promise<boolean> => {
     setDraft((prev) => ({ ...prev, isSaving: true }));
     try {
       const currentDraft = draftRef.current;
       let currentCampaignId = currentDraft.campaignId;
+      const coverUrl =
+        currentDraft.basics.coverImageUrl?.trim() ||
+        currentDraft.visuals.creatives[0]?.url?.trim() ||
+        '';
 
       if (stepNumber === 1) {
+        const title = currentDraft.basics.title.trim() || 'Untitled Campaign';
+        const category = currentDraft.basics.category || 'ENVIRONMENT';
+        const creatorName = currentDraft.basics.creatorName?.trim() || 'Campaign Creator';
+
         if (!currentCampaignId) {
           const res = await creationApi.createDraft({
-            title: currentDraft.basics.title.trim(),
-            category: currentDraft.basics.category || 'ENVIRONMENT',
-            creatorName: currentDraft.basics.creatorName || 'Campaign Creator',
+            title,
+            category,
+            creatorName,
             summary: currentDraft.basics.summary || '',
-            coverImageUrl: currentDraft.basics.coverImageUrl || '',
+            coverImageUrl: coverUrl,
           });
           currentCampaignId = res.id;
         } else {
           await creationApi.updateBasics(currentCampaignId, {
             ...currentDraft.basics,
-            title: currentDraft.basics.title.trim(),
-            category: currentDraft.basics.category || 'ENVIRONMENT',
-            creatorName: currentDraft.basics.creatorName || 'Campaign Creator',
+            title,
+            category,
+            creatorName,
             summary: currentDraft.basics.summary || '',
+            coverImageUrl: coverUrl,
           });
         }
       } else if (stepNumber === 2 && currentCampaignId) {
-        const sourceUrl = currentDraft.story.sources?.[0]?.url?.trim();
-        const cleanSources = sourceUrl
-          ? [{ title: 'Supporting Reference', url: sourceUrl }]
-          : [];
+        const cleanSources = (currentDraft.story.sources || []).filter(
+          (s) => s && (s.title?.trim() || s.url?.trim())
+        );
         const storyText = currentDraft.story.introText?.trim() || '';
 
         await creationApi.updateStory(currentCampaignId, {
@@ -288,31 +411,31 @@ export const DraftProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           sources: cleanSources,
         });
       } else if (stepNumber === 3 && currentCampaignId) {
-        const coverUrl =
-          currentDraft.basics.coverImageUrl?.trim() ||
-          currentDraft.visuals.creatives[0]?.url?.trim() ||
-          'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800';
-
-        const adUrl = currentDraft.visuals.creatives[1]?.url?.trim();
+        const adCreative = currentDraft.visuals.creatives[1];
+        const adUrl = adCreative?.url?.trim();
         const adHeadline =
-          currentDraft.visuals.creatives[0]?.headline?.trim() || currentDraft.basics.title;
+          adCreative?.headline?.trim() || currentDraft.basics.title || 'Campaign Ad';
+        const adDescription = adCreative?.description?.trim() || null;
+        const callToAction = adCreative?.callToAction?.trim() || 'Support Amplification';
 
-        const creatives: any[] = [
-          {
+        const creatives: any[] = [];
+        if (coverUrl) {
+          creatives.push({
             type: 'cover',
             url: coverUrl,
-            headline: adHeadline || 'Campaign Visual',
+            headline: currentDraft.basics.title || 'Campaign Visual',
             callToAction: 'Support Amplification',
             sortOrder: 0,
-          },
-        ];
+          });
+        }
 
         if (adUrl) {
           creatives.push({
             type: 'ad_image',
             url: adUrl,
-            headline: adHeadline || 'Campaign Ad',
-            callToAction: 'Support Amplification',
+            headline: adHeadline,
+            description: adDescription,
+            callToAction,
             sortOrder: 1,
           });
         }
@@ -329,17 +452,16 @@ export const DraftProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             ? currentDraft.reach.targetLocations
             : ['All India'],
           audienceInterests: currentDraft.reach.audienceInterests || [],
-          distributionChannels: ['Instagram', 'YouTube', 'Social Feeds'],
-          campaignDuration: 30,
+          distributionChannels: currentDraft.reach.distributionChannels?.length
+            ? currentDraft.reach.distributionChannels
+            : ['Meta (Instagram & Facebook)', 'Google & YouTube Ads'],
+          campaignDuration: currentDraft.reach.campaignDuration || 30,
+          budgetAllocation: currentDraft.reach.budgetAllocation || 'Balanced (50% Social / 50% Search & Feeds)',
         });
       } else if (stepNumber === 5) {
         const titleToUse = currentDraft.basics.title?.trim() || 'My Campaign';
         const categoryToUse = currentDraft.basics.category || 'ENVIRONMENT';
         const creatorNameToUse = currentDraft.basics.creatorName || 'Campaign Creator';
-        const coverUrl =
-          currentDraft.basics.coverImageUrl?.trim() ||
-          currentDraft.visuals.creatives[0]?.url?.trim() ||
-          'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800';
 
         if (!currentCampaignId) {
           const createRes = await creationApi.createDraft({
@@ -361,34 +483,39 @@ export const DraftProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
 
         // Sync story if present
-        if (currentDraft.story.introText?.trim()) {
-          const sourceUrl = currentDraft.story.sources?.[0]?.url?.trim();
+        if (currentDraft.story.introText?.trim() || currentDraft.story.sources?.length) {
+          const cleanSources = (currentDraft.story.sources || []).filter(
+            (s) => s && (s.title?.trim() || s.url?.trim())
+          );
           await creationApi.updateStory(currentCampaignId, {
             headline: titleToUse,
-            introText: currentDraft.story.introText.trim(),
+            introText: currentDraft.story.introText?.trim() || '',
             storyContent: [
-              { id: '1', type: 'text', content: currentDraft.story.introText.trim() },
+              { id: '1', type: 'text', content: currentDraft.story.introText?.trim() || '' },
             ],
-            sources: sourceUrl ? [{ title: 'Supporting Reference', url: sourceUrl }] : [],
+            sources: cleanSources,
           });
         }
 
         // Sync visuals
-        const creatives: any[] = [
-          {
+        const creatives: any[] = [];
+        if (coverUrl) {
+          creatives.push({
             type: 'cover',
             url: coverUrl,
             headline: titleToUse,
             callToAction: 'Support Amplification',
             sortOrder: 0,
-          },
-        ];
-        if (currentDraft.visuals.creatives[1]?.url?.trim()) {
+          });
+        }
+        const adCreative = currentDraft.visuals.creatives[1];
+        if (adCreative?.url?.trim()) {
           creatives.push({
             type: 'ad_image',
-            url: currentDraft.visuals.creatives[1].url.trim(),
-            headline: titleToUse,
-            callToAction: 'Support Amplification',
+            url: adCreative.url.trim(),
+            headline: adCreative.headline?.trim() || titleToUse,
+            description: adCreative.description?.trim() || null,
+            callToAction: adCreative.callToAction?.trim() || 'Support Amplification',
             sortOrder: 1,
           });
         }
@@ -400,8 +527,11 @@ export const DraftProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             ? currentDraft.reach.targetLocations
             : ['All India'],
           audienceInterests: currentDraft.reach.audienceInterests || [],
-          distributionChannels: ['Instagram', 'YouTube', 'Social Feeds'],
+          distributionChannels: currentDraft.reach.distributionChannels?.length
+            ? currentDraft.reach.distributionChannels
+            : ['Meta (Instagram & Facebook)', 'Google & YouTube Ads'],
           campaignDuration: currentDraft.reach.campaignDuration || 30,
+          budgetAllocation: currentDraft.reach.budgetAllocation || 'Balanced (50% Social / 50% Search & Feeds)',
         });
 
         // Submit for review
@@ -462,9 +592,10 @@ export const DraftProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           audienceInterests: camp.audienceInterests?.length ? camp.audienceInterests : ['General Public'],
           distributionChannels: camp.distributionChannels?.length ? camp.distributionChannels : ['Social Media'],
           campaignDuration: camp.campaignDuration || 30,
+          budgetAllocation: (camp as any).budgetAllocation || (camp as any).targeting?.budgetAllocation || 'Balanced (50% Social / 50% Search & Feeds)',
         },
         submit: {
-          fundingGoalPaise: camp.fundingGoalPaise || 5000000,
+          fundingGoalPaise: camp.fundingGoalPaise || 100000,
           estimatedReach: camp.estimatedReach || 50000,
           agreedToTerms: false,
         },
@@ -493,7 +624,9 @@ export const DraftProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateSubmit,
         updateCoverImage,
         updateAdImage,
+        updateAdCreative,
         saveCurrentStep,
+        saveDraftOnly,
         loadDraftFromBackend,
         resetDraft,
       }}

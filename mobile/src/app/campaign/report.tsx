@@ -109,14 +109,14 @@ export default function CampaignReportScreen() {
           <View style={styles.gridRow}>
             <MetricCard
               label="Total Reach"
-              value={reach.toLocaleString('en-IN')}
+              value={reach.toLocaleString('en-US')}
               change="28%"
               icon={<BarChart3 size={20} color={Colors.primary} />}
               style={styles.gridCard}
             />
             <MetricCard
               label="Ad Impressions"
-              value={impressions.toLocaleString('en-IN')}
+              value={impressions.toLocaleString('en-US')}
               change="16%"
               icon={<Eye size={20} color={Colors.primary} />}
               style={styles.gridCard}
@@ -126,7 +126,7 @@ export default function CampaignReportScreen() {
           <View style={styles.gridRow}>
             <MetricCard
               label="Link Clicks"
-              value={clicks.toLocaleString('en-IN')}
+              value={clicks.toLocaleString('en-US')}
               change="12%"
               icon={<MousePointerClick size={20} color={Colors.primary} />}
               style={styles.gridCard}

@@ -73,7 +73,7 @@ export default function CampaignPreviewScreen() {
 
             <View style={styles.fundingBox}>
               <View style={styles.fundingRow}>
-                <Text style={styles.raised}>₹0</Text>
+                <Text style={styles.raised}>$0</Text>
                 <Text style={styles.goal}>/ {formatINR(goalPaise)}</Text>
               </View>
               <ProgressBar progress={0} height={7} />
@@ -94,7 +94,13 @@ export default function CampaignPreviewScreen() {
         <Button
           title="Back to Editor"
           variant="outline"
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/create/1' as any);
+            }
+          }}
           style={{ width: '100%' }}
         />
       </View>

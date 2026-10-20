@@ -8,11 +8,14 @@ import { Badge } from '../common/badge';
 import { ProgressBar } from '../common/progress-bar';
 import { resolveImageUrl } from '../../constants/config';
 
-// Format paise to INR string e.g. ₹28,450
-export function formatINR(paise: number): string {
-  const rupees = Math.round(paise / 100);
-  return '₹' + rupees.toLocaleString('en-IN');
+// Format cents to USD string e.g. $280 or $1,250
+export function formatUSD(centsOrPaise: number): string {
+  const dollars = Math.round(centsOrPaise / 100);
+  return '$' + dollars.toLocaleString('en-US');
 }
+
+// Keep formatINR alias pointing to formatUSD for backwards compatibility
+export const formatINR = formatUSD;
 
 // Format reach count e.g. 12.5K
 export function formatReach(num: number): string {
@@ -142,8 +145,8 @@ export const CampaignCardLarge: React.FC<CampaignCardLargeProps> = ({
 
   const raisedDisplay =
     campaign.totalRaisedPaise > 0
-      ? formatINR(campaign.totalRaisedPaise)
-      : '₹28,450';
+      ? formatUSD(campaign.totalRaisedPaise)
+      : '$2,850';
 
   const supportersCount = campaign.contributorCount || 320;
 

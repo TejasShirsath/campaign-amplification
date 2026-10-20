@@ -26,6 +26,8 @@ export interface CampaignReachInput {
   audienceInterests: string[];
   distributionChannels: string[];
   campaignDuration: number;
+  budgetAllocation?: string;
+  budgetSplit?: Record<string, number>;
 }
 
 export interface CampaignSubmitInput {

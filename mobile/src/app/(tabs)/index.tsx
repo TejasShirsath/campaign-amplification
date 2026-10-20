@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ImageBackground } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Sparkles } from 'lucide-react-native';
 import { ScreenContainer } from '../../components/common/screen-container';
@@ -82,30 +82,47 @@ export default function HomeScreen() {
         style={styles.header}
       />
 
-      {/* Hero Section matching reference */}
-      <View style={styles.heroSection}>
-        <Text style={styles.heroTitle}>
-          Small contributions.{'\n'}
-          <Text style={styles.heroTitleEmerald}>Wider impact.</Text>
-        </Text>
-        <Text style={styles.heroSubtitle}>
-          Community-driven amplification to help vital public interest messages reach wider audiences.
-        </Text>
+      {/* Hero Section styled after reference card using hero.png background */}
+      <View style={styles.heroCardContainer}>
+        <ImageBackground
+          source={require('../../../assets/images/hero.png')}
+          style={styles.heroCard}
+          imageStyle={styles.heroCardImage}
+        >
+          {/* Subtle Dark Gradient / Contrast Overlay for perfect text legibility */}
+          <View style={styles.heroCardOverlay} />
 
-        <View style={styles.heroActions}>
-          <Button
-            title="Explore Campaigns"
-            showArrow
-            onPress={() => router.push('/(tabs)/explore')}
-            style={styles.primaryHeroBtn}
-          />
-          <Button
-            title="Start a Campaign"
-            variant="secondary"
-            onPress={() => router.push('/create/1' as any)}
-            style={styles.secondaryHeroBtn}
-          />
-        </View>
+          {/* Main Hero Copy */}
+          <View style={styles.heroCopyContainer}>
+            <Text style={styles.heroCardHeading}>
+              Good{'\n'}messages{'\n'}deserve a{'\n'}
+              <Text style={styles.heroCardHeadingHighlight}>wider audience.</Text>
+            </Text>
+
+            <Text style={styles.heroCardSubtext}>
+              Bring people together to help important stories travel beyond existing networks.
+            </Text>
+          </View>
+
+          {/* Action Buttons Row */}
+          <View style={styles.heroCardActions}>
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={() => router.push('/(tabs)/explore')}
+              style={styles.heroBtnPrimary}
+            >
+              <Text style={styles.heroBtnPrimaryText}>Explore campaigns</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => router.push('/create/1' as any)}
+              style={styles.heroBtnSecondary}
+            >
+              <Text style={styles.heroBtnSecondaryText}>Start a campaign</Text>
+            </TouchableOpacity>
+          </View>
+        </ImageBackground>
       </View>
 
 
@@ -179,34 +196,94 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     marginBottom: Spacing.sm,
   },
-  heroSection: {
-    paddingVertical: Spacing.md,
+  heroCardContainer: {
+    marginVertical: Spacing.sm,
+    borderRadius: 28,
+    overflow: 'hidden',
+    backgroundColor: '#042F2E',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
   },
-  heroTitle: {
-    fontSize: Typography.sizes.hero,
-    fontWeight: Typography.weights.extrabold,
-    color: Colors.text,
-    letterSpacing: -0.5,
-    lineHeight: 38,
+  heroCard: {
+    width: '100%',
+    padding: Spacing.xl,
+    paddingTop: Spacing.xxl + 4,
+    paddingBottom: Spacing.xl,
+    borderRadius: 28,
+    overflow: 'hidden',
+    position: 'relative',
+    justifyContent: 'space-between',
   },
-  heroTitleEmerald: {
-    color: Colors.primary,
+  heroCardImage: {
+    borderRadius: 28,
+    resizeMode: 'cover',
   },
-  heroSubtitle: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.textSecondary,
-    lineHeight: 20,
-    marginTop: Spacing.sm,
-    marginBottom: Spacing.lg,
+  heroCardOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(2, 44, 34, 0.45)',
   },
-  heroActions: {
+  heroCopyContainer: {
+    marginBottom: Spacing.xl,
+  },
+  heroCardHeading: {
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: -0.6,
+  },
+  heroCardHeadingHighlight: {
+    color: '#D9F99D', // Light chartreuse / lime tint matching reference
+  },
+  heroCardSubtext: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#E2E8F0',
+    fontWeight: '400',
+    marginTop: Spacing.md,
+    maxWidth: '92%',
+  },
+  heroCardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.sm,
+    marginTop: Spacing.xs,
   },
-  primaryHeroBtn: {
-    width: '100%',
+  heroBtnPrimary: {
+    flex: 1,
+    height: 52,
+    backgroundColor: '#E8FDB7', // Pale lime / chartreuse matching reference
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  secondaryHeroBtn: {
-    width: '100%',
+  heroBtnPrimaryText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#064E3B', // Deep forest green
+  },
+  heroBtnSecondary: {
+    flex: 1,
+    height: 52,
+    backgroundColor: 'rgba(6, 78, 59, 0.4)',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroBtnSecondaryText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   sectionHeader: {
     flexDirection: 'row',

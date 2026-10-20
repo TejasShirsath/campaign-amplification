@@ -63,7 +63,7 @@ export default function ContributionSuccessScreen() {
               {title}
             </Text>
             <Text style={styles.metaText}>
-              ₹{amountNumber.toLocaleString('en-IN')} · {dateStr}
+              ${amountNumber.toLocaleString('en-US')} · {dateStr}
             </Text>
           </View>
           <ChevronRight size={20} color={Colors.textLight} />
@@ -126,16 +126,16 @@ export default function ContributionSuccessScreen() {
             <View style={styles.receiptDivider} />
             <View style={styles.receiptLine}>
               <Text style={styles.receiptLabel}>Ad Distribution (95%)</Text>
-              <Text style={styles.receiptValue}>₹{adSpend.toLocaleString('en-IN')}</Text>
+              <Text style={styles.receiptValue}>${adSpend.toLocaleString('en-US')}</Text>
             </View>
             <View style={styles.receiptLine}>
               <Text style={styles.receiptLabel}>Platform & Verification (5%)</Text>
-              <Text style={styles.receiptValue}>₹{platformFee.toLocaleString('en-IN')}</Text>
+              <Text style={styles.receiptValue}>${platformFee.toLocaleString('en-US')}</Text>
             </View>
             <View style={styles.receiptDivider} />
             <View style={styles.receiptLine}>
               <Text style={styles.totalLabel}>Total Paid</Text>
-              <Text style={styles.totalValue}>₹{amountNumber.toLocaleString('en-IN')}</Text>
+              <Text style={styles.totalValue}>${amountNumber.toLocaleString('en-US')}</Text>
             </View>
 
             <Button

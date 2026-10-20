@@ -22,6 +22,7 @@ import {
 } from 'lucide-react-native';
 import { ScreenContainer } from '../../components/common/screen-container';
 import { HeaderBar } from '../../components/common/header-bar';
+import { RippleUpLogo } from '../../components/common/rippleup-logo';
 import { ONBOARDING_STORAGE_KEY } from '../../components/common/onboarding-slides';
 import { Button } from '../../components/common/button';
 import { Input } from '../../components/common/input';
@@ -269,7 +270,7 @@ export default function ProfileScreen() {
 
       {/* RippleUp Brand Footer */}
       <View style={styles.brandFooter}>
-        <Text style={styles.brandFooterName}>RippleUp</Text>
+        <RippleUpLogo size="sm" style={{ marginBottom: Spacing.xs }} />
         <Text style={styles.brandFooterTagline}>Small contributions. Wider impact.</Text>
         <Text style={styles.brandFooterVersion}>v1.0.0 • Community-driven & Transparent</Text>
       </View>

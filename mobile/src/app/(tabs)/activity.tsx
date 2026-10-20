@@ -72,7 +72,7 @@ export default function ActivityScreen() {
       id: 'mock-1',
       type: 'contribution',
       avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
-      text: 'You contributed ₹500\nto Clean Rivers Brighter Futures',
+      text: 'You contributed $50\nto Clean Rivers Brighter Futures',
       time: '2 hours ago',
       category: 'Contributions',
     },

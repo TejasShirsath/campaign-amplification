@@ -4,10 +4,12 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, Bell, Settings, Share2, Heart } from 'lucide-react-native';
 import { Colors, Radii, Spacing, Typography } from '../../constants/theme';
 import { useAuth } from '../../context/auth-context';
+import { RippleUpLogo } from './rippleup-logo';
 
 export interface HeaderBarProps {
   title?: string;
   subtitle?: string;
+  showLogo?: boolean;
   showBack?: boolean;
   onBack?: () => void;
   rightAction?: React.ReactNode;
@@ -23,6 +25,7 @@ export interface HeaderBarProps {
 export const HeaderBar: React.FC<HeaderBarProps> = ({
   title,
   subtitle,
+  showLogo = false,
   showBack = false,
   onBack,
   rightAction,
@@ -40,10 +43,14 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const handleBack = () => {
     if (onBack) {
       onBack();
-    } else {
+    } else if (router.canGoBack()) {
       router.back();
+    } else {
+      router.replace('/(tabs)' as any);
     }
   };
+
+  const isBrandLogo = showLogo || title === 'RippleUp';
 
   return (
     <View style={[styles.header, style]}>
@@ -58,7 +65,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           </TouchableOpacity>
         )}
         <View style={styles.titleContainer}>
-          {title && <Text style={styles.title}>{title}</Text>}
+          {isBrandLogo ? (
+            <RippleUpLogo size="md" />
+          ) : (
+            title && <Text style={styles.title}>{title}</Text>
+          )}
           {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
         </View>
       </View>
@@ -120,7 +131,16 @@ export const FloatingHeroBar: React.FC<{
     <View style={styles.floatingBar}>
       <TouchableOpacity
         activeOpacity={0.8}
-        onPress={onBack || (() => router.back())}
+        onPress={
+          onBack ||
+          (() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)' as any);
+            }
+          })
+        }
         style={styles.floatingCircle}
       >
         <ArrowLeft size={20} color={Colors.text} />
