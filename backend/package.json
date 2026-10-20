@@ -23,6 +23,11 @@
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
+  "allowScripts": {
+    "@prisma/engines": true,
+    "esbuild": true,
+    "prisma": true
+  },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
