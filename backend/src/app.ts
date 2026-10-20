@@ -23,6 +23,15 @@ export function createApp() {
 
   // ─── Global Middleware ──────────────────────────────────────────────────────
 
+  // Restore original URL when running behind Vercel rewrites
+  app.use((req, _res, next) => {
+    const originalUrl = (req.headers['x-forwarded-url'] || req.headers['x-original-url']) as string | undefined;
+    if (originalUrl) {
+      req.url = originalUrl;
+    }
+    next();
+  });
+
   // Security headers with cross-origin resource sharing for uploaded static files
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 

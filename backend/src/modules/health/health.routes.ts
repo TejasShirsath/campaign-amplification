@@ -5,7 +5,7 @@ import { sendSuccess } from '../../utils/response.js';
 
 const router = Router();
 
-router.get('/health', (_req: Request, res: Response) => {
+router.get(['/', '/health'], (_req: Request, res: Response) => {
   sendSuccess(res, {
     status: 'ok',
     service: 'campaign-amplification-api',

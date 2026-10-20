@@ -19,8 +19,9 @@ function validateEnv() {
     const errors = result.error.issues.map(
       (issue) => `  ✗ ${issue.path.join('.')}: ${issue.message}`
     );
-    console.error('❌ Environment validation failed:\n' + errors.join('\n'));
-    process.exit(1);
+    const message = '❌ Environment validation failed:\n' + errors.join('\n');
+    console.error(message);
+    throw new Error(message);
   }
   return result.data;
 }

@@ -14,9 +14,7 @@ function createPrismaClient(): PrismaClient {
 
 export const prisma = globalForPrisma.prisma || createPrismaClient();
 
-if (env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
-}
+globalForPrisma.prisma = prisma;
 
 export async function connectDatabase(): Promise<void> {
   try {
