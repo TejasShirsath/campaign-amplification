@@ -21,6 +21,9 @@ import uploadRoutes, { uploadDir } from './modules/uploads/uploads.routes.js';
 export function createApp() {
   const app = express();
 
+  // Trust reverse proxy headers (e.g. Vercel, Nginx, cloud load balancers)
+  app.set('trust proxy', 1);
+
   // ─── Global Middleware ──────────────────────────────────────────────────────
 
   // Restore original URL when running behind Vercel rewrites

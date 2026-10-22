@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,8 +6,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Image as RNImage,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { UploadCloud, RefreshCw, Trash2, Copy, AlertCircle, CheckCircle } from 'lucide-react-native';
 import { Colors, Radii, Spacing, Typography } from '../../constants/theme';
@@ -41,6 +41,14 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
 }) => {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [localPreviewUri, setLocalPreviewUri] = useState<string | null>(null);
+
+  // If value is cleared from outside, reset local preview
+  useEffect(() => {
+    if (!value) {
+      setLocalPreviewUri(null);
+    }
+  }, [value]);
 
   const handlePickImage = async () => {
     if (disabled || uploading) return;
@@ -76,7 +84,8 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
         return;
       }
 
-      // 1. Immediately show live local preview
+      // 1. Immediately store and display local image URI
+      setLocalPreviewUri(asset.uri);
       onChange(asset.uri);
       setUploading(true);
 
@@ -95,15 +104,19 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
 
   const handleRemove = () => {
     setError(null);
+    setLocalPreviewUri(null);
     onChange('');
   };
 
   const handleReuseCover = () => {
     if (coverImageUrl) {
       setError(null);
+      setLocalPreviewUri(null);
       onChange(coverImageUrl);
     }
   };
+
+  const displayUri = resolveImageUrl(localPreviewUri || value);
 
   return (
     <View style={styles.container}>
@@ -111,13 +124,18 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
 
       {/* When Image is Present */}
-      {value ? (
+      {value || localPreviewUri ? (
         <View style={styles.previewContainer}>
           <View style={[styles.imageWrapper, compact && styles.imageWrapperCompact]}>
-            <RNImage
-              source={{ uri: resolveImageUrl(value) }}
+            <ExpoImage
+              source={{ uri: displayUri }}
               style={styles.image}
-              resizeMode="cover"
+              contentFit="cover"
+              transition={200}
+              cachePolicy="memory-disk"
+              onError={(err) => {
+                console.warn('[ImageUploadDropzone] Failed to display image:', displayUri, err);
+              }}
             />
             {uploading && (
               <View style={styles.uploadingOverlay}>

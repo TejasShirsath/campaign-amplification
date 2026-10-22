@@ -85,7 +85,13 @@ router.post(
     const uploadedFile = files?.file?.[0] || files?.image?.[0];
 
     const host = req.get('host') || 'localhost:5000';
-    const protocol = req.protocol || 'http';
+    const forwardedProto = req.headers['x-forwarded-proto'] as string | undefined;
+    const isHttps =
+      req.secure ||
+      forwardedProto === 'https' ||
+      host.includes('vercel.app') ||
+      (!host.includes('localhost') && !host.includes('127.0.0.1') && !host.includes('10.0.2.2'));
+    const protocol = isHttps ? 'https' : (req.protocol || 'http');
 
     // 1. Handled by Multer multipart
     if (uploadedFile) {

@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Image as RNImage,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -971,10 +972,11 @@ export default function CreateStepScreen() {
               <View style={styles.previewImagesRow}>
                 {activeCoverImage ? (
                   <View style={styles.previewCoverCol}>
-                    <RNImage
+                    <ExpoImage
                       source={{ uri: resolveImageUrl(activeCoverImage) }}
                       style={styles.previewImageFull}
-                      resizeMode="cover"
+                      contentFit="cover"
+                      transition={200}
                     />
                     <View style={styles.previewImageTag}>
                       <Text style={styles.previewImageTagText}>Cover Visual</Text>
@@ -989,10 +991,11 @@ export default function CreateStepScreen() {
 
                 {adCreative.url ? (
                   <View style={styles.previewAdCol}>
-                    <RNImage
+                    <ExpoImage
                       source={{ uri: resolveImageUrl(adCreative.url) }}
                       style={styles.previewAdImage}
-                      resizeMode="cover"
+                      contentFit="cover"
+                      transition={200}
                     />
                     <View style={styles.previewImageTag}>
                       <Text style={styles.previewImageTagText}>Ad Creative</Text>

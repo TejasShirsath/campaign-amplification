@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
   ScrollView,
   TouchableOpacity,
   Share,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Users, Megaphone, FileText, ExternalLink, ThumbsUp } from 'lucide-react-native';
@@ -22,6 +22,7 @@ import {
   getDaysLeft,
 } from '../../components/campaign/campaign-cards';
 import { Colors, Radii, Spacing, Typography } from '../../constants/theme';
+import { resolveImageUrl } from '../../constants/config';
 import {
   CampaignDetail,
   CampaignProgress,
@@ -187,13 +188,16 @@ export default function CampaignDetailScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 16) + 90 }]}
       >
         {/* Top Hero Image */}
-        <Image
+        <ExpoImage
           source={{
-            uri:
+            uri: resolveImageUrl(
               campaign.coverImageUrl ||
-              'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=800',
+                'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=800'
+            ),
           }}
           style={styles.heroImage}
+          contentFit="cover"
+          transition={200}
         />
 
         {/* Overlapping Content Container matching reference */}
@@ -384,13 +388,16 @@ export default function CampaignDetailScreen() {
             <View style={styles.tabContent}>
               <Text style={styles.sectionHeading}>Organized by</Text>
               <View style={styles.creatorRow}>
-                <Image
+                <ExpoImage
                   source={{
-                    uri:
+                    uri: resolveImageUrl(
                       campaign.creator?.avatarUrl ||
-                      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
+                        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'
+                    ),
                   }}
                   style={styles.creatorAvatar}
+                  contentFit="cover"
+                  transition={200}
                 />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.creatorName}>

@@ -23,21 +23,47 @@ function getApiBaseUrl(): string {
 
 export function resolveImageUrl(url?: string | null): string {
   if (!url) return '';
-  // Local blobs or base64 data URLs should be returned untouched
-  if (url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('file:')) {
+  // Local blobs, device URIs, or base64 data URLs should be returned untouched
+  if (
+    url.startsWith('blob:') ||
+    url.startsWith('data:') ||
+    url.startsWith('file:') ||
+    url.startsWith('content:') ||
+    url.startsWith('ph:')
+  ) {
     return url;
   }
 
-  // Derive configured API host
+  // Upgrade any remote non-localhost HTTP URLs to HTTPS (required for Android network security policy)
+  if (
+    url.startsWith('http://') &&
+    !url.includes('localhost') &&
+    !url.includes('127.0.0.1') &&
+    !url.includes('10.0.2.2')
+  ) {
+    url = url.replace('http://', 'https://');
+  }
+
+  // Derive configured API host and preferred origin
   const configuredApi = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_HOST;
   let preferredHost = 'localhost:5000';
+  let preferredOrigin = 'https://campaign-amplification-theta.vercel.app';
   try {
-    const match = configuredApi.match(/https?:\/\/([^/]+)/);
-    if (match && match[1]) {
-      preferredHost = match[1];
+    const originMatch = configuredApi.match(/^(https?:\/\/[^/]+)/);
+    if (originMatch && originMatch[1]) {
+      preferredOrigin = originMatch[1];
+    }
+    const hostMatch = configuredApi.match(/https?:\/\/([^/]+)/);
+    if (hostMatch && hostMatch[1]) {
+      preferredHost = hostMatch[1];
     }
   } catch {
     // fallback
+  }
+
+  // Handle relative URLs like /uploads/img-123.jpg
+  if (url.startsWith('/')) {
+    return `${preferredOrigin}${url}`;
   }
 
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -50,7 +76,11 @@ export function resolveImageUrl(url?: string | null): string {
   } else {
     // On native devices or emulators, map localhost to the reachable IP
     if (url.includes('localhost:5000') || url.includes('127.0.0.1:5000')) {
-      return url.replace(/http:\/\/(?:localhost|127\.0\.0\.1):5000/, `http://${preferredHost}`);
+      const isHttps = preferredOrigin.startsWith('https');
+      return url.replace(
+        /http:\/\/(?:localhost|127\.0\.0\.1):5000/,
+        `${isHttps ? 'https' : 'http'}://${preferredHost}`
+      );
     }
   }
   return url;

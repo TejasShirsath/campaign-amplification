@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HeaderBar } from '../../components/common/header-bar';
@@ -61,7 +62,12 @@ export default function CampaignPreviewScreen() {
             </Text>
           </View>
 
-          <Image source={{ uri: resolveImageUrl(coverUrl) }} style={styles.heroImage} />
+          <ExpoImage
+            source={{ uri: resolveImageUrl(coverUrl) }}
+            style={styles.heroImage}
+            contentFit="cover"
+            transition={200}
+          />
 
           <View style={styles.body}>
             <Badge
