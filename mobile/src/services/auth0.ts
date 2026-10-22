@@ -108,6 +108,8 @@ class Auth0Service {
   private inMemoryAccessToken: string | null = null;
   private inMemoryExpiresAt: number = 0;
   private refreshPromise: Promise<string | null> | null = null;
+  private inflightExchanges: Map<string, Promise<AuthTokens>> = new Map();
+  private exchangedCodes: Map<string, { tokens: AuthTokens; timestamp: number }> = new Map();
 
   /**
    * Determine the redirect URI for the current platform
@@ -168,6 +170,8 @@ class Auth0Service {
     this.inMemoryAccessToken = null;
     this.inMemoryExpiresAt = 0;
     this.refreshPromise = null;
+    this.inflightExchanges.clear();
+    this.exchangedCodes.clear();
 
     await AsyncStorage.multiRemove([
       STORAGE_KEYS.ACCESS_TOKEN,
@@ -349,7 +353,15 @@ class Auth0Service {
     const authResult = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
 
     if (authResult.type !== 'success') {
+      // On Android / Mobile: when Chrome Custom Tabs is dismissed because an OS Intent
+      // deep link routed to the app, check if tokens were already exchanged via /auth
       if (authResult.type === 'cancel' || authResult.type === 'dismiss') {
+        // Wait briefly for the concurrent deep-link callback to complete exchange
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        const storedTokens = await this.getStoredTokens();
+        if (storedTokens?.accessToken) {
+          return storedTokens;
+        }
         throw new Error('Authentication was cancelled');
       }
       throw new Error(`Authentication failed with status: ${authResult.type}`);
@@ -364,6 +376,14 @@ class Auth0Service {
     const errorDescription = urlObj.searchParams.get('error_description');
 
     if (errorParam) {
+      if (
+        errorParam === 'access_denied' ||
+        errorParam.toLowerCase().includes('cancel') ||
+        errorDescription?.toLowerCase().includes('cancel') ||
+        errorDescription?.toLowerCase().includes('closed')
+      ) {
+        throw new Error('Authentication was cancelled');
+      }
       throw new Error(errorDescription || `Auth0 Error: ${errorParam}`);
     }
 
@@ -379,52 +399,87 @@ class Auth0Service {
   }
 
   /**
-   * Exchange an authorization code for tokens directly using saved or provided verifier
+   * Exchange an authorization code for tokens directly using saved or provided verifier.
+   * Fully deduplicated to safely handle concurrent calls from browser and deep links.
    */
   async exchangeCode(code: string, providedVerifier?: string): Promise<AuthTokens> {
-    const domain = Config.AUTH0.domain.replace(/\/+$/, '');
-    const clientId = Config.AUTH0.clientId;
-    const redirectUri = this.getRedirectUri();
-
-    let verifier = providedVerifier;
-    if (!verifier) {
-      verifier = (await AsyncStorage.getItem('@rippleup_pkce_verifier')) || undefined;
+    // 1. If this code was already exchanged in the last 60 seconds, return cached tokens
+    const recent = this.exchangedCodes.get(code);
+    if (recent && Date.now() - recent.timestamp < 60000) {
+      return recent.tokens;
     }
 
-    if (!verifier) {
-      throw new Error('Cannot complete sign-in: PKCE code verifier is missing.');
+    // 2. If an exchange is already in flight for this exact code, join it
+    const existing = this.inflightExchanges.get(code);
+    if (existing) {
+      return existing;
     }
 
-    const tokenResponse = await fetch(`https://${domain}/oauth/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'authorization_code',
-        client_id: clientId,
-        code,
-        code_verifier: verifier,
-        redirect_uri: redirectUri,
-      }),
-    });
+    const exchangePromise = (async (): Promise<AuthTokens> => {
+      try {
+        const domain = Config.AUTH0.domain.replace(/\/+$/, '');
+        const clientId = Config.AUTH0.clientId;
+        const redirectUri = this.getRedirectUri();
 
-    if (!tokenResponse.ok) {
-      const errJson = await tokenResponse.json().catch(() => ({}));
-      throw new Error(
-        errJson.error_description || errJson.error || `Token exchange failed (${tokenResponse.status})`
-      );
-    }
+        let verifier = providedVerifier;
+        if (!verifier) {
+          verifier = (await AsyncStorage.getItem('@rippleup_pkce_verifier')) || undefined;
+        }
 
-    const tokenData = await tokenResponse.json();
+        if (!verifier) {
+          // If verifier was already consumed by a parallel call, check if stored tokens exist
+          const stored = await this.getStoredTokens();
+          if (stored) return stored;
+          throw new Error('Cannot complete sign-in: PKCE code verifier is missing.');
+        }
 
-    // Clean up temporary verifier
-    await AsyncStorage.multiRemove(['@rippleup_pkce_verifier', '@rippleup_auth_state']);
+        const tokenResponse = await fetch(`https://${domain}/oauth/token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            grant_type: 'authorization_code',
+            client_id: clientId,
+            code,
+            code_verifier: verifier,
+            redirect_uri: redirectUri,
+          }),
+        });
 
-    return this.saveTokens({
-      accessToken: tokenData.access_token,
-      refreshToken: tokenData.refresh_token,
-      idToken: tokenData.id_token,
-      expiresIn: tokenData.expires_in,
-    });
+        if (!tokenResponse.ok) {
+          const errJson = await tokenResponse.json().catch(() => ({}));
+          // If code was already exchanged by another listener in this session, check stored tokens
+          if (errJson.error === 'invalid_grant' || tokenResponse.status === 400) {
+            const currentValid = await this.getStoredTokens();
+            if (currentValid) {
+              return currentValid;
+            }
+          }
+          throw new Error(
+            errJson.error_description || errJson.error || `Token exchange failed (${tokenResponse.status})`
+          );
+        }
+
+        const tokenData = await tokenResponse.json();
+
+        // Clean up temporary verifier
+        await AsyncStorage.multiRemove(['@rippleup_pkce_verifier', '@rippleup_auth_state']);
+
+        const tokens = await this.saveTokens({
+          accessToken: tokenData.access_token,
+          refreshToken: tokenData.refresh_token,
+          idToken: tokenData.id_token,
+          expiresIn: tokenData.expires_in,
+        });
+
+        this.exchangedCodes.set(code, { tokens, timestamp: Date.now() });
+        return tokens;
+      } finally {
+        this.inflightExchanges.delete(code);
+      }
+    })();
+
+    this.inflightExchanges.set(code, exchangePromise);
+    return exchangePromise;
   }
 
   /**
@@ -496,6 +551,7 @@ class Auth0Service {
       if (storedIdToken) {
         const decoded = decodeJwtPayload<IdTokenPayload>(storedIdToken);
         if (decoded && (decoded.picture || decoded.name || decoded.email)) {
+          AsyncStorage.setItem(STORAGE_KEYS.USER_CACHE, JSON.stringify(decoded)).catch(() => {});
           return decoded;
         }
       }
@@ -505,12 +561,25 @@ class Auth0Service {
       if (token) {
         const userInfo = await this.fetchUserInfo(token);
         if (userInfo) {
+          AsyncStorage.setItem(STORAGE_KEYS.USER_CACHE, JSON.stringify(userInfo)).catch(() => {});
           return userInfo;
         }
       }
 
+      // 3. Fallback to cached user data if offline or network failure
+      const cached = await AsyncStorage.getItem(STORAGE_KEYS.USER_CACHE);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+
       return null;
     } catch {
+      try {
+        const cached = await AsyncStorage.getItem(STORAGE_KEYS.USER_CACHE);
+        if (cached) return JSON.parse(cached);
+      } catch {
+        // ignore
+      }
       return null;
     }
   }

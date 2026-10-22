@@ -19,7 +19,8 @@ export interface AuthContextType {
   signIn: () => Promise<boolean>;
   signUp: () => Promise<boolean>;
   logout: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
+  refreshProfile: (explicitToken?: string | null) => Promise<void>;
+  completeAuth: (accessToken: string) => Promise<UserProfile | null>;
   promptAuth: (options?: PromptAuthOptions) => void;
   closeAuthPrompt: () => void;
   switchDemoUser: (role: 'creator' | 'backer') => Promise<void>;
@@ -35,6 +36,7 @@ const AuthContext = createContext<AuthContextType>({
   signUp: async () => false,
   logout: async () => {},
   refreshProfile: async () => {},
+  completeAuth: async () => null,
   promptAuth: () => {},
   closeAuthPrompt: () => {},
   switchDemoUser: async () => {},
@@ -55,11 +57,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const pendingSuccessCallbackRef = useRef<(() => void | Promise<void>) | null>(null);
 
   /**
+   * Automatically close auth modal if user becomes authenticated
+   */
+  useEffect(() => {
+    if (user && token && modalVisible) {
+      setModalVisible(false);
+    }
+  }, [user, token, modalVisible]);
+
+  /**
    * Load backend user profile for the current token
    */
   const loadProfile = useCallback(async (activeToken?: string | null): Promise<UserProfile | null> => {
     try {
-      const curToken = activeToken !== undefined ? activeToken : await auth0Service.getValidAccessToken();
+      const curToken = activeToken || (await auth0Service.getValidAccessToken());
       if (!curToken) {
         setUser(null);
         setToken(null);
@@ -124,6 +135,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   /**
+   * Ingest newly authenticated tokens from anywhere (popup, direct login, or deep link)
+   */
+  const completeAuth = useCallback(async (accessToken: string): Promise<UserProfile | null> => {
+    setToken(accessToken);
+    await setAuthToken(accessToken);
+    const profile = await loadProfile(accessToken);
+    setModalVisible(false);
+
+    if (pendingSuccessCallbackRef.current) {
+      try {
+        await pendingSuccessCallbackRef.current();
+      } catch (callbackErr) {
+        console.warn('[Pending Callback Error]', callbackErr);
+      }
+      pendingSuccessCallbackRef.current = null;
+    }
+
+    return profile;
+  }, [loadProfile]);
+
+  /**
    * Restore stored session on app startup
    */
   useEffect(() => {
@@ -164,29 +196,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setIsAuthenticating(true);
       const tokens = await auth0Service.authenticate({ isSignUp: false });
-      setToken(tokens.accessToken);
-      await setAuthToken(tokens.accessToken);
-
-      // Load real backend profile
-      await loadProfile(tokens.accessToken);
-
-      // Execute any pending action that requested authentication
-      if (pendingSuccessCallbackRef.current) {
-        try {
-          await pendingSuccessCallbackRef.current();
-        } catch (callbackErr) {
-          console.warn('[Pending Callback Error]', callbackErr);
-        }
-        pendingSuccessCallbackRef.current = null;
-      }
-
+      await completeAuth(tokens.accessToken);
       return true;
     } catch (err: any) {
-      if (err?.message === 'Authentication was cancelled') {
-        throw err;
+      // Check if tokens were successfully saved by concurrent Android deep link handler
+      const stored = await auth0Service.getStoredTokens();
+      if (stored?.accessToken) {
+        await completeAuth(stored.accessToken);
+        return true;
       }
+
+      const isCancelled =
+        err?.message === 'Authentication was cancelled' ||
+        err?.message?.toLowerCase().includes('cancel') ||
+        err?.message?.toLowerCase().includes('dismiss') ||
+        err?.message?.toLowerCase().includes('access_denied');
+
+      if (isCancelled) {
+        console.log('[Auth0] Authentication cancelled by user');
+        return false;
+      }
+
       console.error('[Auth0 SignIn Error]', err);
-      throw err;
+      return false;
     } finally {
       setIsAuthenticating(false);
     }
@@ -199,28 +231,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setIsAuthenticating(true);
       const tokens = await auth0Service.authenticate({ isSignUp: true });
-      setToken(tokens.accessToken);
-      await setAuthToken(tokens.accessToken);
-
-      // Load real backend profile (or backend auto-creates on first request)
-      await loadProfile(tokens.accessToken);
-
-      if (pendingSuccessCallbackRef.current) {
-        try {
-          await pendingSuccessCallbackRef.current();
-        } catch (callbackErr) {
-          console.warn('[Pending Callback Error]', callbackErr);
-        }
-        pendingSuccessCallbackRef.current = null;
-      }
-
+      await completeAuth(tokens.accessToken);
       return true;
     } catch (err: any) {
-      if (err?.message === 'Authentication was cancelled') {
-        throw err;
+      // Check if tokens were successfully saved by concurrent Android deep link handler
+      const stored = await auth0Service.getStoredTokens();
+      if (stored?.accessToken) {
+        await completeAuth(stored.accessToken);
+        return true;
       }
+
+      const isCancelled =
+        err?.message === 'Authentication was cancelled' ||
+        err?.message?.toLowerCase().includes('cancel') ||
+        err?.message?.toLowerCase().includes('dismiss') ||
+        err?.message?.toLowerCase().includes('access_denied');
+
+      if (isCancelled) {
+        console.log('[Auth0] Sign up cancelled by user');
+        return false;
+      }
+
       console.error('[Auth0 SignUp Error]', err);
-      throw err;
+      return false;
     } finally {
       setIsAuthenticating(false);
     }
@@ -232,6 +265,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async (): Promise<void> => {
     try {
       setIsLoading(true);
+      setModalVisible(false);
+      pendingSuccessCallbackRef.current = null;
       await setAuthToken(null);
       setToken(null);
       setUser(null);
@@ -267,6 +302,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    */
   const switchDemoUser = async (role: 'creator' | 'backer') => {
     setIsLoading(true);
+    setModalVisible(false);
     const demoToken = role === 'creator' ? 'demo-creator' : 'demo-backer';
     await setAuthToken(demoToken);
     setToken(demoToken);
@@ -297,9 +333,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signIn,
         signUp,
         logout,
-        refreshProfile: async () => {
-          await loadProfile(token);
+        refreshProfile: async (explicitToken?: string | null) => {
+          const t = explicitToken || token || (await auth0Service.getValidAccessToken());
+          if (t) {
+            await loadProfile(t);
+          }
         },
+        completeAuth,
         promptAuth,
         closeAuthPrompt,
         switchDemoUser,

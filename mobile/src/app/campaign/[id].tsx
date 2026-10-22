@@ -136,6 +136,21 @@ export default function CampaignDetailScreen() {
     }
   };
 
+  const handleSupportCampaign = () => {
+    if (!campaign?.id) return;
+    if (!isAuthenticated) {
+      promptAuth({
+        title: 'Support Campaign',
+        reason: 'Sign in or create an account to support this campaign and track your contributions.',
+        onSuccess: () => {
+          router.push(`/campaign/contribute?id=${campaign.id}` as any);
+        },
+      });
+      return;
+    }
+    router.push(`/campaign/contribute?id=${campaign.id}` as any);
+  };
+
   if (loading || !campaign) {
     return (
       <View style={styles.container}>
@@ -394,8 +409,8 @@ export default function CampaignDetailScreen() {
       {/* Fixed Bottom CTA Bar matching reference */}
       <View style={[styles.fixedBottomBar, { paddingBottom: Math.max(insets.bottom, Spacing.md) }]}>
         <Button
-          title="Contribute Now"
-          onPress={() => router.push(`/campaign/contribute?id=${campaign.id}` as any)}
+          title="Support Campaign"
+          onPress={handleSupportCampaign}
           style={styles.contributeButton}
         />
       </View>

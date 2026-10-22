@@ -24,7 +24,7 @@ declare global {
 /**
  * Handle demo token resolution
  */
-async function resolveDemoUser(req: Request, token: string): Promise<boolean> {
+export async function resolveDemoUser(req: Request, token: string): Promise<boolean> {
   if (!token.startsWith('demo-')) return false;
 
   const authSubject = token === 'demo-backer' || token === 'demo-backer-token'

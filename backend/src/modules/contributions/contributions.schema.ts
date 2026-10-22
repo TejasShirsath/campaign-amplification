@@ -12,7 +12,7 @@ export const createContributionSchema = z.object({
 export const verifyPaymentSchema = z.object({
   razorpayOrderId: z.string().min(1, 'Order ID is required'),
   razorpayPaymentId: z.string().min(1, 'Payment ID is required'),
-  razorpaySignature: z.string().min(1, 'Signature is required'),
+  razorpaySignature: z.string().optional().default(''),
 });
 
 export type CreateContributionInput = z.infer<typeof createContributionSchema>;

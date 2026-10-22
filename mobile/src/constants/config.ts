@@ -66,14 +66,6 @@ export const Config = {
   RAZORPAY: {
     keyId: process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_z9mXXfneQCasqW',
   },
-  CURRENCY: {
-    USD_TO_INR_RATE: 86.0,
-    toINR: (usd: number): number => Math.round(usd * 86.0),
-    toPaiseINR: (usd: number): number => Math.round(usd * 86.0 * 100),
-    formatUSD: (usd: number): string => `$${usd.toLocaleString('en-US')}`,
-    formatINR: (inr: number): string => `₹${inr.toLocaleString('en-IN')}`,
-    formatDual: (usd: number): string => `$${usd.toLocaleString('en-US')} (≈ ₹${Math.round(usd * 86.0).toLocaleString('en-IN')})`,
-  },
   DEMO_USERS: {
     CREATOR: {
       token: 'demo-creator',

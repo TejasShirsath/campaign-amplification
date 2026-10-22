@@ -10,7 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import {
   Layers,
   HeartHandshake,
@@ -20,7 +20,6 @@ import {
   Sparkles,
   X,
   LogIn,
-  UserPlus,
   LogOut,
   ShieldCheck,
   TrendingUp,
@@ -29,7 +28,7 @@ import { ScreenContainer } from '../../components/common/screen-container';
 import { HeaderBar } from '../../components/common/header-bar';
 import { RippleUpLogo } from '../../components/common/rippleup-logo';
 import { UserAvatar } from '../../components/common/user-avatar';
-import { ONBOARDING_STORAGE_KEY } from '../../components/common/onboarding-slides';
+
 import { Button } from '../../components/common/button';
 import { Input } from '../../components/common/input';
 import { SkeletonProfile } from '../../components/common/skeleton';
@@ -146,15 +145,13 @@ export default function ProfileScreen() {
               title="Sign In with Auth0"
               icon={<LogIn size={18} color="#FFFFFF" />}
               loading={isAuthenticating}
-              onPress={() => signIn()}
-              style={{ width: '100%' }}
-            />
-            <Button
-              title="Create an Account"
-              variant="outline"
-              icon={<UserPlus size={18} color={Colors.primary} />}
-              loading={isAuthenticating}
-              onPress={() => signUp()}
+              onPress={async () => {
+                try {
+                  await signIn();
+                } catch {
+                  // silent
+                }
+              }}
               style={{ width: '100%' }}
             />
           </View>
@@ -354,29 +351,6 @@ export default function ProfileScreen() {
           <ChevronRight size={18} color={Colors.textLight} />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={async () => {
-            try {
-              await AsyncStorage.removeItem(ONBOARDING_STORAGE_KEY);
-              Alert.alert(
-                'Introduction Reset',
-                'The RippleUp introduction slides will appear when you restart the app.'
-              );
-            } catch {
-              // ignore
-            }
-          }}
-          style={styles.menuItem}
-        >
-          <View style={styles.menuLeft}>
-            <View style={styles.menuIconContainer}>
-              <Sparkles size={20} color={Colors.primary} />
-            </View>
-            <Text style={styles.menuTitle}>Replay Introduction Slides</Text>
-          </View>
-          <ChevronRight size={18} color={Colors.textLight} />
-        </TouchableOpacity>
 
         {/* Log Out inside the Menu list / Settings */}
         <TouchableOpacity

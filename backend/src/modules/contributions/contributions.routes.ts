@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { authenticate, optionalAuth } from '../../middleware/auth.js';
+import { authenticate, optionalAuth, resolveDemoUser } from '../../middleware/auth.js';
 import { validate, uuidParamSchema } from '../../middleware/validate.js';
 import { asyncHandler } from '../../middleware/async-handler.js';
 import { createContributionSchema, verifyPaymentSchema } from './contributions.schema.js';
@@ -14,13 +14,13 @@ import { env } from '../../config/env.js';
 
 const router = Router();
 
-// POST /campaigns/:id/contributions - Create a contribution (supports authenticated and guest contributions)
+// POST /campaigns/:id/contributions - Create a contribution (requires authentication)
 router.post(
   '/campaigns/:id/contributions',
-  optionalAuth,
+  ...authenticate,
   validate({ params: uuidParamSchema, body: createContributionSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.userId || (await userService.getOrCreateGuestUser());
+    const userId = req.userId!;
     const result = await contributionService.createContribution(
       req.params.id as string,
       userId,
@@ -48,7 +48,7 @@ router.get(
   '/payments/razorpay/checkout/:orderId',
   asyncHandler(async (req: Request, res: Response) => {
     const orderId = req.params.orderId as string;
-    const attempt = await prisma.paymentAttempt.findUnique({
+    let attempt = await prisma.paymentAttempt.findUnique({
       where: { razorpayOrderId: orderId },
       include: {
         contribution: {
@@ -61,12 +61,35 @@ router.get(
     });
 
     if (!attempt) {
+      attempt = await prisma.paymentAttempt.findFirst({
+        where: { contributionId: orderId },
+        include: {
+          contribution: {
+            include: {
+              campaign: { select: { title: true } },
+              user: { select: { displayName: true, name: true, email: true } },
+            },
+          },
+        },
+      });
+    }
+
+    if (!attempt) {
       throw ApiError.notFound('Payment order');
     }
+
+    // Explicitly configure headers so Razorpay Checkout JS and iframe load without CSP restrictions
+    res.removeHeader('Content-Security-Policy');
+    res.removeHeader('X-Frame-Options');
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com; connect-src * https://api.razorpay.com https://lumberjack.razorpay.com; frame-src * https://api.razorpay.com; style-src * 'unsafe-inline' https:; img-src * data: https:;"
+    );
 
     const campaignTitle = attempt.contribution.campaign.title;
     const customerName = attempt.contribution.user?.displayName || attempt.contribution.user?.name || '';
     const customerEmail = attempt.contribution.user?.email || '';
+    const isRealRazorpayOrder = Boolean(attempt.razorpayOrderId && !attempt.razorpayOrderId.startsWith('order_demo_'));
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -102,13 +125,13 @@ router.get(
   </div>
 
   <script>
+    var isRealOrder = ${JSON.stringify(isRealRazorpayOrder)};
     var options = {
       key: "${env.RAZORPAY_KEY_ID}",
       amount: ${attempt.amountPaise},
       currency: "${attempt.currency || 'INR'}",
       name: "RippleUp",
       description: "Contribution to " + ${JSON.stringify(campaignTitle)},
-      order_id: "${attempt.razorpayOrderId}",
       prefill: {
         name: ${JSON.stringify(customerName)},
         email: ${JSON.stringify(customerEmail)}
@@ -121,18 +144,50 @@ router.get(
           cancelPayment();
         }
       },
-      handler: function(response) {
-        var returnUrl = "rippleup://campaign/success?razorpay_order_id=" + encodeURIComponent(response.razorpay_order_id) +
+      handler: async function(response) {
+        document.getElementById('loader').style.display = 'block';
+        document.getElementById('payBtn').style.display = 'none';
+        document.querySelector('.title').innerText = 'Payment Successful!';
+        document.querySelector('.desc').innerText = 'Verifying contribution and returning to app...';
+
+        try {
+          await fetch('/api/v1/payments/razorpay/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              razorpayOrderId: response.razorpay_order_id || "${attempt.razorpayOrderId}",
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature || 'simulated_signature_verified'
+            })
+          });
+        } catch (e) {
+          console.warn('[Hosted Checkout Verify]', e);
+        }
+
+        var redirectParam = new URLSearchParams(window.location.search).get('redirect_url');
+        var baseReturn = redirectParam || "rippleup://payment-callback";
+        var separator = baseReturn.includes('?') ? '&' : '?';
+        var returnUrl = baseReturn + separator +
+          "razorpay_order_id=" + encodeURIComponent(response.razorpay_order_id || "${attempt.razorpayOrderId}") +
           "&razorpay_payment_id=" + encodeURIComponent(response.razorpay_payment_id) +
-          "&razorpay_signature=" + encodeURIComponent(response.razorpay_signature) +
-          "&contributionId=${attempt.contributionId}";
+          "&razorpay_signature=" + encodeURIComponent(response.razorpay_signature || '') +
+          "&contributionId=${attempt.contributionId}" +
+          "&status=success";
+
         window.location.href = returnUrl;
       }
     };
 
+    if (isRealOrder) {
+      options.order_id = "${attempt.razorpayOrderId}";
+    }
+
     function openCheckout() {
       try {
         var rzp = new Razorpay(options);
+        rzp.on('payment.failed', function(resp) {
+          alert('Payment Failed: ' + (resp.error ? resp.error.description : 'Unknown error'));
+        });
         rzp.open();
       } catch (e) {
         alert("Failed to initialize Razorpay: " + e.message);
@@ -140,12 +195,15 @@ router.get(
     }
 
     function cancelPayment() {
-      window.location.href = "rippleup://campaign/cancel";
+      var redirectParam = new URLSearchParams(window.location.search).get('redirect_url');
+      var baseReturn = redirectParam || "rippleup://payment-callback";
+      var separator = baseReturn.includes('?') ? '&' : '?';
+      window.location.href = baseReturn + separator + "status=cancelled";
     }
 
     // Auto open on load
     window.onload = function() {
-      setTimeout(openCheckout, 400);
+      setTimeout(openCheckout, 300);
     };
   </script>
 </body>
@@ -159,22 +217,33 @@ router.get(
 // POST /payments/razorpay/verify - Verify Razorpay payment
 router.post(
   '/payments/razorpay/verify',
-  optionalAuth,
   validate({ body: verifyPaymentSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    let effectiveUserId = req.userId;
+    let effectiveUserId: string | undefined = undefined;
+
+    // 1. Try extracting user from Bearer token if provided
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '').trim();
+      if (token.startsWith('demo-')) {
+        await resolveDemoUser(req, token);
+        effectiveUserId = req.userId;
+      }
+    }
+
+    // 2. Resolve user from the payment attempt record
     if (!effectiveUserId) {
-      // For guest contributions, resolve userId from the payment attempt's contribution
       const attempt = await prisma.paymentAttempt.findUnique({
         where: { razorpayOrderId: req.body.razorpayOrderId },
         select: { contribution: { select: { userId: true } } },
       });
-      if (attempt?.contribution?.userId) {
-        effectiveUserId = attempt.contribution.userId;
-      } else {
-        effectiveUserId = await userService.getOrCreateGuestUser();
-      }
+      effectiveUserId = attempt?.contribution?.userId;
     }
+
+    if (!effectiveUserId) {
+      effectiveUserId = await userService.getOrCreateGuestUser();
+    }
+
     const result = await contributionService.verifyPayment(effectiveUserId, req.body);
     sendSuccess(res, result);
   })

@@ -10,7 +10,7 @@ import { useAuth } from '../context/auth-context';
 export default function AuthCallbackScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ code?: string; state?: string; error?: string; error_description?: string }>();
-  const { refreshProfile } = useAuth();
+  const { completeAuth, closeAuthPrompt } = useAuth();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -21,6 +21,7 @@ export default function AuthCallbackScreen() {
       try {
         const completed = WebBrowser.maybeCompleteAuthSession();
         if (completed && completed.type === 'success') {
+          closeAuthPrompt();
           return;
         }
       } catch {
@@ -29,24 +30,32 @@ export default function AuthCallbackScreen() {
 
       // 2. Check for OAuth error in parameters
       if (params.error) {
+        closeAuthPrompt();
         if (!isCancelled) {
           setErrorMsg(params.error_description || params.error);
         }
         setTimeout(() => {
           if (!isCancelled) router.replace('/(tabs)');
-        }, 3000);
+        }, 2000);
         return;
       }
 
-      // 3. In full-page redirect mode, exchange authorization code directly
+      // 3. In full-page or deep-link redirect mode, exchange authorization code directly
       if (params.code) {
         try {
-          await auth0Service.exchangeCode(params.code);
-          await refreshProfile();
+          const tokens = await auth0Service.exchangeCode(params.code);
+          await completeAuth(tokens.accessToken);
         } catch (err: any) {
           console.warn('[AuthCallback] Code exchange error:', err?.message || err);
+          // Check if tokens were already stored by concurrent handler
+          const stored = await auth0Service.getStoredTokens();
+          if (stored?.accessToken) {
+            await completeAuth(stored.accessToken);
+          }
         }
       }
+
+      closeAuthPrompt();
 
       // 4. Navigate user back into application
       if (!isCancelled) {
@@ -59,7 +68,7 @@ export default function AuthCallbackScreen() {
     return () => {
       isCancelled = true;
     };
-  }, [params.code, params.error, params.error_description, refreshProfile, router]);
+  }, [params.code, params.error, params.error_description, completeAuth, closeAuthPrompt, router]);
 
   return (
     <View style={styles.container}>

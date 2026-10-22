@@ -36,29 +36,43 @@ export default function RootLayout() {
   const [isOffline, setIsOffline] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+
     // Check onboarding completion in storage
-    (async () => {
-      try {
-        const completed = await AsyncStorage.getItem(ONBOARDING_STORAGE_KEY);
-        setHasSeenOnboarding(completed === 'true');
-      } catch {
-        setHasSeenOnboarding(true);
+    AsyncStorage.getItem(ONBOARDING_STORAGE_KEY)
+      .then((completed) => {
+        if (isMounted) {
+          setHasSeenOnboarding(completed === 'true');
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setHasSeenOnboarding(true);
+        }
+      });
+
+    // Safety timeout: guarantee hasSeenOnboarding is resolved
+    const safetyTimer = setTimeout(() => {
+      if (isMounted) {
+        setHasSeenOnboarding((prev) => (prev === null ? true : prev));
       }
-    })();
+    }, 1200);
 
     // Initial network connectivity check
     NetInfo.fetch().then((state) => {
       const offline = state.isConnected === false || state.isInternetReachable === false;
-      setIsOffline(offline);
+      if (isMounted) setIsOffline(offline);
     });
 
     // Subscribe to live network state updates
     const unsubscribe = NetInfo.addEventListener((state) => {
       const offline = state.isConnected === false || state.isInternetReachable === false;
-      setIsOffline(offline);
+      if (isMounted) setIsOffline(offline);
     });
 
     return () => {
+      isMounted = false;
+      clearTimeout(safetyTimer);
       unsubscribe();
     };
   }, []);
@@ -88,19 +102,22 @@ export default function RootLayout() {
             <Stack.Screen name="user/saved" options={{ headerShown: false }} />
           </Stack>
 
-          {/* 1. Animated Splash Screen overlay */}
-          {!splashFinished && (
-            <AnimatedSplashOverlay onFinish={() => setSplashFinished(true)} />
-          )}
-
-          {/* 2. Offline Screen (shown after splash if user is offline) */}
-          {splashFinished && isOffline && (
+          {/* 1. Offline Screen (rendered underneath splash so no flash occurs if offline) */}
+          {isOffline && (
             <OfflineScreen onRetrySuccess={() => setIsOffline(false)} />
           )}
 
-          {/* 3. First-time Onboarding Slides (shown after splash when online and not yet seen) */}
-          {splashFinished && !isOffline && hasSeenOnboarding === false && (
+          {/* 2. First-time Onboarding Slides (rendered underneath splash so it appears immediately when splash fades) */}
+          {!isOffline && hasSeenOnboarding === false && (
             <OnboardingSlides onComplete={() => setHasSeenOnboarding(true)} />
+          )}
+
+          {/* 3. Animated Splash Screen overlay (always on top of everything until finished) */}
+          {!splashFinished && (
+            <AnimatedSplashOverlay
+              ready={hasSeenOnboarding !== null}
+              onFinish={() => setSplashFinished(true)}
+            />
           )}
         </DraftProvider>
       </AuthProvider>

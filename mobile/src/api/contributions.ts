@@ -10,6 +10,9 @@ export interface ContributionOrderResponse {
   keyId: string;
   campaignTitle: string;
   isDemoMode: boolean;
+  razorpayAmountPaise?: number;
+  razorpayAmountInr?: string;
+  exchangeRate?: number;
 }
 
 export interface VerifyPaymentInput {

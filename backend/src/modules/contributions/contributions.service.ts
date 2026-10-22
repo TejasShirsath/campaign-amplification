@@ -7,6 +7,9 @@ import type { CreateContributionInput, VerifyPaymentInput } from './contribution
 // Platform fee: 5% of contribution
 const PLATFORM_FEE_PERCENT = 5;
 
+// Standard conversion rate: 1 USD = 84 INR (1 cent = 84 paise)
+const USD_TO_INR_RATE = 84;
+
 export class ContributionService {
   /**
    * Create a contribution and Razorpay order.
@@ -40,19 +43,22 @@ export class ContributionService {
       throw ApiError.conflict('The funding period for this campaign has ended');
     }
 
-    // 5% platform fee is included within the total contribution amount (95% to ad distribution, 5% fee)
-    const totalPaise = data.amountPaise;
-    const platformFeePaise = Math.round((totalPaise * PLATFORM_FEE_PERCENT) / 100);
-    const campaignAmountPaise = totalPaise - platformFeePaise;
+    // Calculate platform fee in USD cents
+    const platformFeePaise = Math.round((data.amountPaise * PLATFORM_FEE_PERCENT) / 100);
+    const totalPaise = data.amountPaise + platformFeePaise;
+
+    // Convert USD total (cents) to INR (paise) for Razorpay processing:
+    // 1 USD = 84 INR => 1 cent = 84 paise
+    const razorpayAmountPaise = Math.round(totalPaise * USD_TO_INR_RATE);
 
     // Create contribution and payment attempt in a transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Create contribution record
+      // Create contribution record (stored in USD cents for campaign progress)
       const contribution = await tx.contribution.create({
         data: {
           campaignId,
           userId,
-          amountPaise: campaignAmountPaise,
+          amountPaise: data.amountPaise,
           platformFeePaise,
           totalPaise,
           status: 'PENDING',
@@ -60,26 +66,29 @@ export class ContributionService {
         },
       });
 
-      // Create Razorpay order
+      // Create Razorpay order in INR (converted from USD)
       let razorpayOrder;
       if (env.DEMO_PAYMENT_MODE) {
         // Demo mode: simulate a Razorpay order
         razorpayOrder = {
           id: `order_demo_${contribution.id.replace(/-/g, '').substring(0, 16)}`,
-          amount: totalPaise,
+          amount: razorpayAmountPaise,
           currency: 'INR',
           receipt: contribution.id,
         };
       } else {
         try {
           razorpayOrder = await createRazorpayOrder({
-            amountPaise: totalPaise,
+            amountPaise: razorpayAmountPaise,
             currency: 'INR',
             receipt: contribution.id,
             notes: {
               campaignId,
               contributionId: contribution.id,
               userId,
+              usdAmount: `$${(data.amountPaise / 100).toFixed(2)}`,
+              usdTotal: `$${(totalPaise / 100).toFixed(2)}`,
+              exchangeRate: `${USD_TO_INR_RATE} INR/USD`,
             },
           });
         } catch (rzpErr: any) {
@@ -90,12 +99,12 @@ export class ContributionService {
         }
       }
 
-      // Create payment attempt record
+      // Create payment attempt record with INR amount for Razorpay verification
       const paymentAttempt = await tx.paymentAttempt.create({
         data: {
           contributionId: contribution.id,
           razorpayOrderId: razorpayOrder.id,
-          amountPaise: totalPaise,
+          amountPaise: razorpayAmountPaise,
           currency: 'INR',
           status: 'CREATED',
         },
@@ -115,6 +124,9 @@ export class ContributionService {
       platformFeePaise,
       totalPaise,
       currency: 'INR',
+      razorpayAmountPaise,
+      razorpayAmountInr: (razorpayAmountPaise / 100).toFixed(2),
+      exchangeRate: USD_TO_INR_RATE,
       keyId: env.RAZORPAY_KEY_ID,
       campaignTitle: campaign.title,
       isDemoMode: env.DEMO_PAYMENT_MODE,
@@ -166,6 +178,9 @@ export class ContributionService {
     ) {
       signatureValid = true;
     } else {
+      if (!data.razorpaySignature) {
+        throw ApiError.badRequest('Missing Razorpay payment signature');
+      }
       signatureValid = verifyRazorpaySignature({
         orderId: data.razorpayOrderId,
         paymentId: data.razorpayPaymentId,

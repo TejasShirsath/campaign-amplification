@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { X, Sparkles, LogIn, UserPlus, AlertCircle } from 'lucide-react-native';
+import { X, Sparkles, LogIn, AlertCircle } from 'lucide-react-native';
 import { RippleUpLogo } from './rippleup-logo';
 import { Button } from './button';
 import { Colors, Radii, Shadows, Spacing, Typography } from '../../constants/theme';
@@ -17,7 +17,7 @@ export interface AuthModalProps {
   visible: boolean;
   onClose: () => void;
   onSignIn: () => Promise<boolean>;
-  onSignUp: () => Promise<boolean>;
+  onSignUp?: () => Promise<boolean>;
   title?: string;
   reason?: string;
   isAuthenticating?: boolean;
@@ -33,43 +33,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   isAuthenticating = false,
 }) => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState<'signin' | 'signup' | null>(null);
+  const [actionLoading, setActionLoading] = useState<boolean>(false);
 
   const handleSignIn = async () => {
     try {
       setErrorMsg(null);
-      setActionLoading('signin');
+      setActionLoading(true);
       const success = await onSignIn();
       if (success) {
         onClose();
       }
     } catch (err: any) {
-      if (err?.message !== 'Authentication was cancelled') {
+      const isCancelled =
+        err?.message === 'Authentication was cancelled' ||
+        err?.message?.toLowerCase().includes('cancel') ||
+        err?.message?.toLowerCase().includes('dismiss');
+      if (!isCancelled) {
         setErrorMsg(err?.message || 'Sign in failed. Please try again.');
       }
     } finally {
-      setActionLoading(null);
+      setActionLoading(false);
     }
   };
 
-  const handleSignUp = async () => {
-    try {
-      setErrorMsg(null);
-      setActionLoading('signup');
-      const success = await onSignUp();
-      if (success) {
-        onClose();
-      }
-    } catch (err: any) {
-      if (err?.message !== 'Authentication was cancelled') {
-        setErrorMsg(err?.message || 'Sign up failed. Please try again.');
-      }
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const isBusy = isAuthenticating || !!actionLoading;
+  const isBusy = isAuthenticating || actionLoading;
 
   return (
     <Modal
@@ -110,20 +97,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <Button
               title="Sign In with Auth0"
               icon={<LogIn size={18} color="#FFFFFF" />}
-              loading={actionLoading === 'signin'}
+              loading={actionLoading}
               disabled={isBusy}
               onPress={handleSignIn}
               style={styles.primaryBtn}
-            />
-
-            <Button
-              title="Create an Account"
-              variant="outline"
-              icon={<UserPlus size={18} color={Colors.primary} />}
-              loading={actionLoading === 'signup'}
-              disabled={isBusy}
-              onPress={handleSignUp}
-              style={styles.secondaryBtn}
             />
           </View>
 
@@ -212,9 +189,6 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   primaryBtn: {
-    width: '100%',
-  },
-  secondaryBtn: {
     width: '100%',
   },
   footerNote: {

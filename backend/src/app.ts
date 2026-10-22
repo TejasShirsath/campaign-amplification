@@ -33,7 +33,12 @@ export function createApp() {
   });
 
   // Security headers with cross-origin resource sharing for uploaded static files
-  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+      contentSecurityPolicy: false,
+    })
+  );
 
   // CORS
   app.use(

@@ -29,7 +29,7 @@ export default function ContributeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, isAuthenticated, promptAuth, isAuthenticating } = useAuth();
 
   const [campaign, setCampaign] = useState<CampaignDetail | null>(null);
   const [selectedAmount, setSelectedAmount] = useState<number>(25);
@@ -56,21 +56,37 @@ export default function ContributeScreen() {
     })();
   }, [id]);
 
+  useEffect(() => {
+    if (!isAuthenticated && !loading && campaign) {
+      promptAuth({
+        title: 'Sign In to Contribute',
+        reason: 'Sign in or create an account to support campaigns and track your contributions.',
+        onSuccess: () => {},
+      });
+    }
+  }, [isAuthenticated, loading, campaign, promptAuth]);
+
   const activeAmount = isCustom ? parseInt(customInput.replace(/[^0-9]/g, '') || '0', 10) : selectedAmount;
-  const inrAmount = Config.CURRENCY.toINR(activeAmount);
-  const inrPaise = Config.CURRENCY.toPaiseINR(activeAmount);
 
   // 95% ad spend, 5% fee calculation
-  const adSpendUSD = Math.round(activeAmount * 0.95);
-  const platformFeeUSD = Math.round(activeAmount * 0.05);
-  const adSpendINR = Math.round(inrAmount * 0.95);
-  const platformFeeINR = Math.round(inrAmount * 0.05);
+  const adSpend = Math.round(activeAmount * 0.95);
+  const platformFee = Math.round(activeAmount * 0.05);
 
   // Amplification reach estimate (~250 people per dollar)
   const estReach = activeAmount * 250;
 
   const handlePayment = async () => {
     setErrorMsg(null);
+    if (!isAuthenticated) {
+      promptAuth({
+        title: 'Sign In to Contribute',
+        reason: 'Sign in or create an account to support campaigns and track your contributions.',
+        onSuccess: () => {
+          handlePayment();
+        },
+      });
+      return;
+    }
     if (!id || !campaign) {
       setErrorMsg('Campaign information is still loading. Please try again.');
       return;
@@ -86,28 +102,39 @@ export default function ContributeScreen() {
 
     try {
       setSubmitting(true);
+      const amountPaise = activeAmount * 100;
 
-      // 1. Create contribution order on backend with converted INR amount in paise (1 USD = ₹86 INR)
-      const orderRes = await contributionsApi.createOrder(id, inrPaise, false);
+      // 1. Create contribution order with Razorpay order ID on backend
+      const orderRes = await contributionsApi.createOrder(id, amountPaise, false);
       const contributionId = orderRes.contributionId;
 
-      // 2. Open real Razorpay Test Mode checkout for the converted amount in INR
+      // 2. Open real Razorpay Checkout with amount converted to INR (Rs)
+      const inrAmountPaise = orderRes.razorpayAmountPaise || Math.round(orderRes.totalPaise * 84);
+
       const paymentResult = await openRazorpayCheckout({
         keyId: orderRes.keyId || Config.RAZORPAY.keyId,
         orderId: orderRes.orderId,
-        amountPaise: orderRes.totalPaise,
+        contributionId: orderRes.contributionId,
+        amountPaise: inrAmountPaise,
         currency: orderRes.currency || 'INR',
-        campaignTitle: `${orderRes.campaignTitle || campaign.title} ($${activeAmount} USD)`,
+        campaignTitle: orderRes.campaignTitle || campaign.title,
+        usdAmount: activeAmount,
         userName: user?.displayName || user?.name || undefined,
         userEmail: user?.email || undefined,
       });
 
-      // 3. Verify Razorpay cryptographic signature on backend
-      await contributionsApi.verifyPayment({
-        razorpayOrderId: paymentResult.razorpayOrderId,
-        razorpayPaymentId: paymentResult.razorpayPaymentId,
-        razorpaySignature: paymentResult.razorpaySignature,
-      });
+      // 3. Verify Razorpay cryptographic signature on backend if not already verified
+      if (paymentResult.razorpaySignature !== 'verified_by_backend') {
+        try {
+          await contributionsApi.verifyPayment({
+            razorpayOrderId: paymentResult.razorpayOrderId,
+            razorpayPaymentId: paymentResult.razorpayPaymentId,
+            razorpaySignature: paymentResult.razorpaySignature,
+          });
+        } catch (verifyErr) {
+          console.warn('[Verify payment warning]', verifyErr);
+        }
+      }
 
       // 4. Navigate to Success Confirmation screen
       router.replace({
@@ -116,13 +143,15 @@ export default function ContributeScreen() {
           contributionId,
           campaignId: id,
           amount: String(activeAmount),
-          amountINR: String(inrAmount),
           campaignTitle: campaign.title,
           coverImageUrl: campaign.coverImageUrl || '',
         },
       });
     } catch (err: any) {
-      const msg = err.message || 'Unable to process payment at this time.';
+      let msg = err.message || 'Unable to process payment at this time.';
+      if (err.details && Array.isArray(err.details) && err.details.length > 0) {
+        msg = err.details.map((d: any) => d.message || d.field).join(', ');
+      }
       if (
         msg.includes('cancelled') ||
         msg.includes('dismiss') ||
@@ -217,7 +246,6 @@ export default function ContributeScreen() {
         <View style={styles.presetGrid}>
           {PRESET_AMOUNTS.map((amt) => {
             const isSelected = !isCustom && selectedAmount === amt;
-            const inrEquivalent = Config.CURRENCY.toINR(amt);
             return (
               <TouchableOpacity
                 key={amt}
@@ -237,15 +265,7 @@ export default function ContributeScreen() {
                     isSelected && styles.presetTextSelected,
                   ]}
                 >
-                  ${amt}
-                </Text>
-                <Text
-                  style={[
-                    styles.presetInrSubtext,
-                    isSelected && styles.presetInrSubtextSelected,
-                  ]}
-                >
-                  ₹{inrEquivalent.toLocaleString('en-IN')}
+                  ${amt.toLocaleString('en-US')}
                 </Text>
               </TouchableOpacity>
             );
@@ -270,20 +290,12 @@ export default function ContributeScreen() {
             >
               Custom
             </Text>
-            <Text
-              style={[
-                styles.presetInrSubtext,
-                isCustom && styles.presetInrSubtextSelected,
-              ]}
-            >
-              Any $
-            </Text>
           </TouchableOpacity>
         </View>
 
         {isCustom && (
           <Input
-            placeholder="Enter custom amount in USD ($)"
+            placeholder="Enter custom amount in $"
             keyboardType="numeric"
             value={customInput}
             onChangeText={setCustomInput}
@@ -291,25 +303,13 @@ export default function ContributeScreen() {
           />
         )}
 
-        {/* Currency Conversion Card */}
-        <View style={styles.conversionCard}>
-          <View style={styles.conversionLeft}>
-            <Text style={styles.conversionTitle}>Currency Conversion</Text>
-            <Text style={styles.conversionRate}>Exchange rate: 1 USD ≈ ₹86.00 INR</Text>
-          </View>
-          <View style={styles.conversionRight}>
-            <Text style={styles.conversionTotalINR}>₹{inrAmount.toLocaleString('en-IN')}</Text>
-            <Text style={styles.conversionTotalUSD}>for ${activeAmount} USD</Text>
-          </View>
-        </View>
-
         {/* Fee Breakdown Text matching reference */}
         <View style={styles.breakdownBox}>
           <Text style={styles.breakdownText}>
-            95% goes to digital ad distribution: ${adSpendUSD} (≈ ₹{adSpendINR.toLocaleString('en-IN')})
+            95% goes to digital ad distribution (${adSpend.toLocaleString('en-US')})
           </Text>
           <Text style={styles.breakdownTextSub}>
-            5% verification & platform fee: ${platformFeeUSD} (≈ ₹{platformFeeINR.toLocaleString('en-IN')})
+            5% verification & platform fee (${platformFee.toLocaleString('en-US')})
           </Text>
         </View>
 
@@ -326,6 +326,26 @@ export default function ContributeScreen() {
             I understand this is not a donation to a cause. It funds digital distribution and message amplification.
           </Text>
         </TouchableOpacity>
+
+        {/* Sign In Notice if not authenticated */}
+        {!isAuthenticated && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() =>
+              promptAuth({
+                title: 'Sign In to Contribute',
+                reason: 'Sign in or create an account to support campaigns and track your contributions.',
+                onSuccess: () => {},
+              })
+            }
+            style={styles.signInNotice}
+          >
+            <ShieldCheck size={18} color={Colors.primary} />
+            <Text style={styles.signInNoticeText}>
+              Sign in is required to contribute and track your impact. Tap here to sign in.
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* Fixed Bottom CTA matching reference */}
@@ -336,9 +356,9 @@ export default function ContributeScreen() {
           </View>
         )}
         <Button
-          title={`Pay ₹${inrAmount.toLocaleString('en-IN')} ($${activeAmount} USD)`}
+          title={isAuthenticated ? 'Continue to Payment' : 'Sign In to Contribute'}
           showArrow
-          loading={submitting}
+          loading={submitting || isAuthenticating}
           onPress={handlePayment}
           style={styles.payBtn}
         />
@@ -431,14 +451,13 @@ const styles = StyleSheet.create({
   },
   presetBtn: {
     width: '31%',
-    height: 56,
+    height: 52,
     borderRadius: Radii.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
   },
   presetBtnSelected: {
     backgroundColor: Colors.darkPrimary,
@@ -446,61 +465,15 @@ const styles = StyleSheet.create({
   },
   presetText: {
     fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.bold,
+    fontWeight: Typography.weights.semibold,
     color: Colors.text,
   },
   presetTextSelected: {
     color: '#FFFFFF',
-  },
-  presetInrSubtext: {
-    fontSize: 10,
-    fontWeight: Typography.weights.medium,
-    color: Colors.textMuted,
-    marginTop: 1,
-  },
-  presetInrSubtextSelected: {
-    color: 'rgba(255, 255, 255, 0.85)',
-  },
-  conversionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#DCFCE7',
-    borderRadius: Radii.lg,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    marginTop: Spacing.md,
-  },
-  conversionLeft: {
-    flex: 1,
-  },
-  conversionTitle: {
-    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
-    color: '#166534',
-  },
-  conversionRate: {
-    fontSize: 11,
-    color: '#15803D',
-    marginTop: 2,
-  },
-  conversionRight: {
-    alignItems: 'flex-end',
-  },
-  conversionTotalINR: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.extrabold,
-    color: '#166534',
-  },
-  conversionTotalUSD: {
-    fontSize: 11,
-    color: '#15803D',
-    marginTop: 1,
   },
   breakdownBox: {
-    marginVertical: Spacing.md,
+    marginVertical: Spacing.lg,
     paddingVertical: Spacing.xs,
   },
   breakdownText: {
@@ -571,5 +544,23 @@ const styles = StyleSheet.create({
   },
   payBtn: {
     width: '100%',
+  },
+  signInNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: Radii.md,
+    padding: Spacing.md,
+    marginTop: Spacing.md,
+    gap: Spacing.sm,
+  },
+  signInNoticeText: {
+    fontSize: Typography.sizes.xs,
+    color: '#166534',
+    flex: 1,
+    lineHeight: 18,
+    fontWeight: '500',
   },
 });

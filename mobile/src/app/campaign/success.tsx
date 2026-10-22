@@ -5,7 +5,6 @@ import { Check, ChevronRight, X } from 'lucide-react-native';
 import { Button } from '../../components/common/button';
 import { Colors, Radii, Shadows, Spacing, Typography } from '../../constants/theme';
 import { formatINR } from '../../components/campaign/campaign-cards';
-import { Config } from '../../constants/config';
 
 export default function ContributionSuccessScreen() {
   const router = useRouter();
@@ -13,19 +12,16 @@ export default function ContributionSuccessScreen() {
     contributionId?: string;
     campaignId?: string;
     amount?: string;
-    amountINR?: string;
     campaignTitle?: string;
     coverImageUrl?: string;
   }>();
 
   const [receiptVisible, setReceiptVisible] = useState(false);
 
-  const amountNumber = parseInt(params.amount || '25', 10);
-  const inrAmount = params.amountINR ? parseInt(params.amountINR, 10) : Config.CURRENCY.toINR(amountNumber);
-  const adSpendUSD = Math.round(amountNumber * 0.95);
-  const platformFeeUSD = Math.round(amountNumber * 0.05);
-  const adSpendINR = Math.round(inrAmount * 0.95);
-  const platformFeeINR = Math.round(inrAmount * 0.05);
+  const amountNumber = parseInt(params.amount || '500', 10);
+  const amountPaise = amountNumber * 100;
+  const adSpend = Math.round(amountNumber * 0.95);
+  const platformFee = Math.round(amountNumber * 0.05);
 
   const title = params.campaignTitle || 'Clean Rivers Brighter Futures';
   const coverUrl =
@@ -67,7 +63,7 @@ export default function ContributionSuccessScreen() {
               {title}
             </Text>
             <Text style={styles.metaText}>
-              ${amountNumber.toLocaleString('en-US')} (₹{inrAmount.toLocaleString('en-IN')}) · {dateStr}
+              ${amountNumber.toLocaleString('en-US')} · {dateStr}
             </Text>
           </View>
           <ChevronRight size={20} color={Colors.textLight} />
@@ -127,23 +123,19 @@ export default function ContributionSuccessScreen() {
                 {title}
               </Text>
             </View>
-            <View style={styles.receiptLine}>
-              <Text style={styles.receiptLabel}>Exchange Rate</Text>
-              <Text style={styles.receiptValue}>1 USD ≈ ₹86.00 INR</Text>
-            </View>
             <View style={styles.receiptDivider} />
             <View style={styles.receiptLine}>
               <Text style={styles.receiptLabel}>Ad Distribution (95%)</Text>
-              <Text style={styles.receiptValue}>${adSpendUSD} (≈ ₹{adSpendINR.toLocaleString('en-IN')})</Text>
+              <Text style={styles.receiptValue}>${adSpend.toLocaleString('en-US')}</Text>
             </View>
             <View style={styles.receiptLine}>
-              <Text style={styles.receiptLabel}>Platform Fee (5%)</Text>
-              <Text style={styles.receiptValue}>${platformFeeUSD} (≈ ₹{platformFeeINR.toLocaleString('en-IN')})</Text>
+              <Text style={styles.receiptLabel}>Platform & Verification (5%)</Text>
+              <Text style={styles.receiptValue}>${platformFee.toLocaleString('en-US')}</Text>
             </View>
             <View style={styles.receiptDivider} />
             <View style={styles.receiptLine}>
-              <Text style={styles.totalLabel}>Total Processed</Text>
-              <Text style={styles.totalValue}>₹{inrAmount.toLocaleString('en-IN')} (${amountNumber} USD)</Text>
+              <Text style={styles.totalLabel}>Total Paid</Text>
+              <Text style={styles.totalValue}>${amountNumber.toLocaleString('en-US')}</Text>
             </View>
 
             <Button

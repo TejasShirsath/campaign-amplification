@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Sparkles } from 'lucide-react-native';
 import { ScreenContainer } from '../../components/common/screen-container';
@@ -99,6 +100,26 @@ export default function HomeScreen() {
     router.push('/create/1' as any);
   };
 
+  const handleSupportCampaign = (campaignId: string) => {
+    if (!isAuthenticated) {
+      promptAuth({
+        title: 'Support Campaign',
+        reason: 'Sign in or create an account to support campaigns and track your contributions.',
+        onSuccess: () => {
+          router.push({
+            pathname: '/campaign/contribute',
+            params: { id: campaignId },
+          } as any);
+        },
+      });
+      return;
+    }
+    router.push({
+      pathname: '/campaign/contribute',
+      params: { id: campaignId },
+    } as any);
+  };
+
   const primaryFeatured = featured[0];
 
   return (
@@ -114,14 +135,19 @@ export default function HomeScreen() {
 
       {/* Hero Section styled after reference card using hero.png background */}
       <View style={styles.heroCardContainer}>
-        <ImageBackground
+        {/* Background Image: guaranteed edge-to-edge coverage on all devices */}
+        <ExpoImage
           source={require('../../../assets/images/hero.png')}
-          style={styles.heroCard}
-          imageStyle={styles.heroCardImage}
-        >
-          {/* Subtle Dark Gradient / Contrast Overlay for perfect text legibility */}
-          <View style={styles.heroCardOverlay} />
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          contentPosition="center"
+        />
 
+        {/* Subtle Dark Gradient / Contrast Overlay for perfect text legibility */}
+        <View style={styles.heroCardOverlay} />
+
+        {/* Content Container with internal padding */}
+        <View style={styles.heroContent}>
           {/* Main Hero Copy */}
           <View style={styles.heroCopyContainer}>
             <Text style={styles.heroCardHeading}>
@@ -152,7 +178,7 @@ export default function HomeScreen() {
               <Text style={styles.heroBtnSecondaryText}>Start a campaign</Text>
             </TouchableOpacity>
           </View>
-        </ImageBackground>
+        </View>
       </View>
 
 
@@ -179,12 +205,7 @@ export default function HomeScreen() {
             isSaved={!!savedIds[primaryFeatured.id]}
             onToggleSave={() => toggleSave(primaryFeatured.id)}
             onPress={() => router.push(`/campaign/${primaryFeatured.id}` as any)}
-            onSupportPress={() =>
-              router.push({
-                pathname: '/campaign/contribute',
-                params: { id: primaryFeatured.id },
-              } as any)
-            }
+            onSupportPress={() => handleSupportCampaign(primaryFeatured.id)}
           />
 
           {/* Additional featured campaigns if available */}
@@ -195,12 +216,7 @@ export default function HomeScreen() {
                 isSaved={!!savedIds[camp.id]}
                 onToggleSave={() => toggleSave(camp.id)}
                 onPress={() => router.push(`/campaign/${camp.id}` as any)}
-                onSupportPress={() =>
-                  router.push({
-                    pathname: '/campaign/contribute',
-                    params: { id: camp.id },
-                  } as any)
-                }
+                onSupportPress={() => handleSupportCampaign(camp.id)}
               />
             </View>
           ))}
@@ -230,6 +246,7 @@ const styles = StyleSheet.create({
     marginVertical: Spacing.sm,
     borderRadius: 28,
     overflow: 'hidden',
+    position: 'relative',
     backgroundColor: '#042F2E',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
@@ -237,19 +254,12 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
-  heroCard: {
+  heroContent: {
     width: '100%',
     padding: Spacing.xl,
     paddingTop: Spacing.xxl + 4,
     paddingBottom: Spacing.xl,
-    borderRadius: 28,
-    overflow: 'hidden',
-    position: 'relative',
     justifyContent: 'space-between',
-  },
-  heroCardImage: {
-    borderRadius: 28,
-    resizeMode: 'cover',
   },
   heroCardOverlay: {
     ...StyleSheet.absoluteFill,
