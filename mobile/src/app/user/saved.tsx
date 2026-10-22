@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bookmark, LogIn, Compass } from 'lucide-react-native';
 import { HeaderBar } from '../../components/common/header-bar';
 import { Button } from '../../components/common/button';
@@ -13,6 +14,7 @@ import { useAuth } from '../../context/auth-context';
 
 export default function SavedCampaignsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { isAuthenticated, promptAuth, isAuthenticating } = useAuth();
   const [saved, setSaved] = useState<CampaignSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,7 +51,7 @@ export default function SavedCampaignsScreen() {
   // ─── GUEST STATE ─────────────────────────────────────────────────────────────
   if (!isAuthenticated) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 16) }]}>
         <HeaderBar title="Saved Campaigns" showBack style={styles.header} />
         <View style={styles.guestContainer}>
           <View style={styles.guestIconCircle}>
@@ -79,10 +81,10 @@ export default function SavedCampaignsScreen() {
 
   // ─── AUTHENTICATED STATE ─────────────────────────────────────────────────────
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <HeaderBar title="Saved Campaigns" showBack style={styles.header} />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 16) + Spacing.xl }]}>
         {loading ? (
           <>
             <SkeletonCampaignCardRow />

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BarChart3,
   Eye,
@@ -24,6 +25,7 @@ import { formatINR } from '../../components/campaign/campaign-cards';
 
 export default function CampaignReportScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const insets = useSafeAreaInsets();
   const [report, setReport] = useState<DistributionReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState('Last 30 days');
@@ -58,13 +60,13 @@ export default function CampaignReportScreen() {
   const periods = ['Last 7 days', 'Last 30 days', 'Last 90 days', 'All time'];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <HeaderBar title="Campaign Reports" showBack style={styles.header} />
 
       {loading ? (
         <SkeletonReport />
       ) : (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 16) + Spacing.xl }]}>
         {/* Period Selector Dropdown matching reference */}
         <View style={styles.periodSection}>
           <TouchableOpacity

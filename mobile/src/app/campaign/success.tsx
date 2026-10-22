@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Image, Modal, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, ChevronRight, X } from 'lucide-react-native';
 import { Button } from '../../components/common/button';
 import { Colors, Radii, Shadows, Spacing, Typography } from '../../constants/theme';
@@ -8,6 +9,7 @@ import { formatINR } from '../../components/campaign/campaign-cards';
 
 export default function ContributionSuccessScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     contributionId?: string;
     campaignId?: string;
@@ -35,7 +37,15 @@ export default function ContributionSuccessScreen() {
   });
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        {
+          paddingTop: Math.max(insets.top + 24, 60),
+          paddingBottom: Math.max(insets.bottom, 16) + Spacing.lg,
+        },
+      ]}
+    >
       <View style={styles.content}>
         {/* Large Emerald Checkmark Circle matching reference */}
         <View style={styles.checkmarkCircle}>
@@ -156,8 +166,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
     paddingHorizontal: Spacing.xl,
-    paddingTop: 100,
-    paddingBottom: Spacing.xxl,
     justifyContent: 'space-between',
   },
   content: {
