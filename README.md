@@ -1,5 +1,7 @@
 <div align="center">
 
+https://github.com/user-attachments/assets/bd180429-5daf-444c-842e-5caa5b7fb661
+
 # 🌊 RippleUp — Campaign Amplification Platform
 
 **Empower Important Messages to Reach Audiences Beyond Personal Networks**
